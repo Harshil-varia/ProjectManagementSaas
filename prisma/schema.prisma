@@ -1,0 +1,113 @@
+generator client {
+  provider = "prisma-client-js"
+  output   = "../app/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id          String        @id @default(cuid())
+  email       String        @unique
+  name        String?
+  password    String
+  role        Role          @default(EMPLOYEE)
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+  active      Boolean        @default(true)
+  projectsUsers   ProjectUser[]
+  timeEntries TimeEntry[]
+  employeeRate    Decimal  @db.Decimal(10, 2) @default(0)
+  projectPermissions ProjectPermission[]
+  rateHistory       RateHistory[]
+
+}
+
+model TimeEntry {
+  id          String    @id @default(cuid())
+  userId      String
+  projectId   String
+  description String?
+  startTime   DateTime
+  endTime     DateTime?
+  duration    Int?
+  hours       Decimal  @db.Decimal(5, 2)
+  date        DateTime
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  project     Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Project {
+  id          String        @id @default(cuid())
+  name        String
+  description String?
+  color       String        @default("#3b82f6")
+  active      Boolean       @default(true)
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+  projectUsers       ProjectUser[]
+  timeEntries TimeEntry[]
+  totalBudget  Decimal  @db.Decimal(12, 2) @default(0)
+  q1Budget     Decimal  @db.Decimal(12, 2) @default(0) 
+  q2Budget     Decimal  @db.Decimal(12, 2) @default(0)
+  q3Budget     Decimal  @db.Decimal(12, 2) @default(0)
+  q4Budget     Decimal  @db.Decimal(12, 2) @default(0)
+  q1Spent      Decimal  @db.Decimal(12, 2) @default(0)
+  q2Spent      Decimal  @db.Decimal(12, 2) @default(0)
+  q3Spent      Decimal  @db.Decimal(12, 2) @default(0)
+  q4Spent      Decimal  @db.Decimal(12, 2) @default(0)
+  projectPermissions ProjectPermission[]
+}
+
+model ProjectUser {
+  id        String   @id @default(cuid())
+  userId    String
+  projectId String
+  createdAt DateTime @default(now())
+  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, projectId])
+}
+
+model ProjectPermission {
+  id         String         @id @default(cuid())
+  userId     String
+  projectId  String
+  permission PermissionType
+  createdAt  DateTime       @default(now())
+
+  // Relationships
+  user       User           @relation(fields: [userId], references: [id])
+  project    Project        @relation(fields: [projectId], references: [id])
+
+  @@unique([userId, projectId, permission])
+}
+
+model RateHistory {
+  id        String   @id @default(cuid())
+  userId    String
+  rate      Decimal  @db.Decimal(10, 2)
+  effectiveDate DateTime
+  createdAt DateTime @default(now())
+  createdBy String // Admin who made the change
+
+  // Relationships
+  user      User     @relation(fields: [userId], references: [id])
+}
+
+enum Role {
+  ADMIN
+  EMPLOYEE
+}
+
+
+enum PermissionType {
+  VIEW_REPORTS
+  EDIT_BUDGETS
+  FULL_ACCESS
+}

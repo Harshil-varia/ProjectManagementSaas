@@ -1,26 +1,712 @@
 @import "tailwindcss";
+@import "tw-animate-css";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
+@custom-variant dark (&:is(.dark *));
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar: var(--sidebar);
+  --color-chart-5: var(--chart-5);
+  --color-chart-4: var(--chart-4);
+  --color-chart-3: var(--chart-3);
+  --color-chart-2: var(--chart-2);
+  --color-chart-1: var(--chart-1);
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  
+  /* Custom time tracker colors */
+  --color-success: oklch(0.7 0.15 142);
+  --color-success-foreground: oklch(0.98 0.01 142);
+  --color-warning: oklch(0.8 0.15 85);
+  --color-warning-foreground: oklch(0.2 0.05 85);
+  --color-info: oklch(0.7 0.15 250);
+  --color-info-foreground: oklch(0.98 0.01 250);
+  --color-dashboard-bg: var(--background);
+  --color-stats-gradient-from: var(--primary);
+  --color-stats-gradient-to: oklch(0.6 0.2 280);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+:root {
+  --radius: 0.625rem;
+  --background: oklch(1 0 0);
+  --foreground: oklch(0.129 0.042 264.695);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.129 0.042 264.695);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.129 0.042 264.695);
+  --primary: oklch(0.208 0.042 265.755);
+  --primary-foreground: oklch(0.984 0.003 247.858);
+  --secondary: oklch(0.968 0.007 247.896);
+  --secondary-foreground: oklch(0.208 0.042 265.755);
+  --muted: oklch(0.968 0.007 247.896);
+  --muted-foreground: oklch(0.554 0.046 257.417);
+  --accent: oklch(0.968 0.007 247.896);
+  --accent-foreground: oklch(0.208 0.042 265.755);
+  --destructive: oklch(0.577 0.245 27.325);
+  --border: oklch(0.929 0.013 255.508);
+  --input: oklch(0.929 0.013 255.508);
+  --ring: oklch(0.704 0.04 256.788);
+  --chart-1: oklch(0.646 0.222 41.116);
+  --chart-2: oklch(0.6 0.118 184.704);
+  --chart-3: oklch(0.398 0.07 227.392);
+  --chart-4: oklch(0.828 0.189 84.429);
+  --chart-5: oklch(0.769 0.188 70.08);
+  --sidebar: oklch(0.984 0.003 247.858);
+  --sidebar-foreground: oklch(0.129 0.042 264.695);
+  --sidebar-primary: oklch(0.208 0.042 265.755);
+  --sidebar-primary-foreground: oklch(0.984 0.003 247.858);
+  --sidebar-accent: oklch(0.968 0.007 247.896);
+  --sidebar-accent-foreground: oklch(0.208 0.042 265.755);
+  --sidebar-border: oklch(0.929 0.013 255.508);
+  --sidebar-ring: oklch(0.704 0.04 256.788);
+}
+
+.dark {
+  --background: oklch(0.129 0.042 264.695);
+  --foreground: oklch(0.984 0.003 247.858);
+  --card: oklch(0.208 0.042 265.755);
+  --card-foreground: oklch(0.984 0.003 247.858);
+  --popover: oklch(0.208 0.042 265.755);
+  --popover-foreground: oklch(0.984 0.003 247.858);
+  --primary: oklch(0.929 0.013 255.508);
+  --primary-foreground: oklch(0.208 0.042 265.755);
+  --secondary: oklch(0.279 0.041 260.031);
+  --secondary-foreground: oklch(0.984 0.003 247.858);
+  --muted: oklch(0.279 0.041 260.031);
+  --muted-foreground: oklch(0.704 0.04 256.788);
+  --accent: oklch(0.279 0.041 260.031);
+  --accent-foreground: oklch(0.984 0.003 247.858);
+  --destructive: oklch(0.704 0.191 22.216);
+  --border: oklch(1 0 0 / 10%);
+  --input: oklch(1 0 0 / 15%);
+  --ring: oklch(0.551 0.027 264.364);
+  --chart-1: oklch(0.488 0.243 264.376);
+  --chart-2: oklch(0.696 0.17 162.48);
+  --chart-3: oklch(0.769 0.188 70.08);
+  --chart-4: oklch(0.627 0.265 303.9);
+  --chart-5: oklch(0.645 0.246 16.439);
+  --sidebar: oklch(0.208 0.042 265.755);
+  --sidebar-foreground: oklch(0.984 0.003 247.858);
+  --sidebar-primary: oklch(0.488 0.243 264.376);
+  --sidebar-primary-foreground: oklch(0.984 0.003 247.858);
+  --sidebar-accent: oklch(0.279 0.041 260.031);
+  --sidebar-accent-foreground: oklch(0.984 0.003 247.858);
+  --sidebar-border: oklch(1 0 0 / 10%);
+  --sidebar-ring: oklch(0.551 0.027 264.364);
+  
+  /* Dark mode custom colors */
+  --color-success: oklch(0.6 0.15 142);
+  --color-warning: oklch(0.7 0.15 85);
+  --color-info: oklch(0.7 0.15 250);
+  --color-dashboard-bg: var(--background);
+  --color-stats-gradient-from: var(--primary);
+  --color-stats-gradient-to: oklch(0.6 0.2 280);
+}
+
+/* Dropdown and modal z-index hierarchy */
+.dropdown-content {
+  z-index: 50;
+}
+
+.modal-overlay {
+  z-index: 40;
+}
+
+.sticky-header {
+  z-index: 30;
+}
+
+.dropdown-overlay {
+  z-index: 45;
+}
+
+/* Ensure dropdowns stay above scrollable content */
+[data-radix-popper-content-wrapper] {
+  z-index: 50 !important;
+}
+
+[data-radix-select-content] {
+  z-index: 50 !important;
+  position: fixed !important;
+  will-change: transform;
+}
+
+[data-radix-popper-content-wrapper] {
+  z-index: 9999 !important;
+  position: fixed !important;
+}
+
+/* Fix for sticky positioning */
+.dropdown-trigger {
+  position: relative;
+  z-index: 1;
+}
+
+/* Ensure dropdowns stay in viewport */
+.radix-select-content {
+  max-height: 300px !important;
+  overflow-y: auto !important;
+}
+
+/* Smooth scrolling for dropdown content */
+[data-radix-select-viewport] {
+  scrollbar-width: thin;
+  scrollbar-color: var(--muted-foreground) transparent;
+}
+
+[data-radix-select-viewport]::-webkit-scrollbar {
+  width: 6px;
+}
+
+[data-radix-select-viewport]::-webkit-scrollbar-thumb {
+  background-color: var(--muted-foreground);
+  border-radius: 3px;
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  
+  body {
+    @apply bg-background text-foreground;
+    font-feature-settings: "rlig" 1, "calt" 1;
+    transition: background-color 0.3s ease, color 0.3s ease;
   }
 }
 
+/* Enhanced component styles using Tailwind v4 approach */
+@layer components {
+  /* Dashboard styles */
+  .dashboard-bg {
+    background-color: var(--color-dashboard-bg);
+  }
+
+  .stats-card {
+    @apply bg-card border border-border shadow-sm;
+    border-radius: var(--radius-lg);
+    transition: all 0.2s ease-in-out;
+  }
+
+  .stats-card:hover {
+    @apply shadow-md;
+    transform: translateY(-1px);
+  }
+
+  .stats-gradient {
+    background: linear-gradient(135deg, var(--color-stats-gradient-from), var(--color-stats-gradient-to));
+    @apply text-primary-foreground;
+    border: none;
+  }
+
+  /* Glass morphism effect */
+  .glass {
+    @apply bg-background/80 backdrop-blur-sm border border-border;
+  }
+
+  /* Navigation styles */
+  .nav-item {
+    @apply relative transition-all duration-200 rounded-md;
+  }
+
+  .nav-item::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: 0;
+    background: var(--color-primary);
+    transition: width 0.2s ease;
+    border-radius: 0 2px 2px 0;
+  }
+
+  .nav-item.active::before {
+    width: 3px;
+  }
+
+  .nav-item:hover {
+    @apply bg-accent;
+  }
+
+  /* Project color indicators */
+  .project-indicator {
+    @apply relative overflow-hidden;
+  }
+
+  .project-indicator::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: 4px;
+    background: var(--project-color, var(--color-primary));
+    border-radius: 0 2px 2px 0;
+  }
+
+  /* Time entry cards */
+  .time-entry-card {
+    @apply bg-card border border-border transition-all duration-200;
+    border-radius: var(--radius-md);
+  }
+
+  .time-entry-card:hover {
+    @apply shadow-md;
+    transform: scale(1.01);
+  }
+
+  /* Calendar day cells */
+  .calendar-day {
+    @apply bg-card border border-border transition-all duration-200;
+    border-radius: var(--radius-md);
+    min-height: 120px;
+  }
+
+  .calendar-day:hover {
+    @apply shadow-sm;
+    transform: scale(1.005);
+  }
+
+  .calendar-day.today {
+    @apply border-primary;
+    background: color-mix(in oklch, var(--color-primary) 5%, var(--color-card));
+  }
+
+  /* Status badges */
+  .badge-success {
+    background: color-mix(in oklch, var(--color-success) 15%, transparent);
+    color: var(--color-success);
+    border: 1px solid color-mix(in oklch, var(--color-success) 25%, transparent);
+  }
+
+  .badge-warning {
+    background: color-mix(in oklch, var(--color-warning) 15%, transparent);
+    color: var(--color-warning);
+    border: 1px solid color-mix(in oklch, var(--color-warning) 25%, transparent);
+  }
+
+  .badge-error {
+    background: color-mix(in oklch, var(--color-destructive) 15%, transparent);
+    color: var(--color-destructive);
+    border: 1px solid color-mix(in oklch, var(--color-destructive) 25%, transparent);
+  }
+
+  .badge-info {
+    background: color-mix(in oklch, var(--color-info) 15%, transparent);
+    color: var(--color-info);
+    border: 1px solid color-mix(in oklch, var(--color-info) 25%, transparent);
+  }
+
+  /* Timer specific styles */
+  .timer-display {
+    font-family: var(--font-mono);
+    font-variant-numeric: tabular-nums;
+    @apply tracking-wider;
+  }
+
+  .timer-running {
+    animation: pulse-slow 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  }
+
+  /* Progress bar enhancements */
+  .progress-bar {
+    @apply overflow-hidden relative bg-muted rounded-full;
+    height: 8px;
+  }
+
+  .progress-bar-fill {
+    @apply h-full rounded-full transition-all duration-300;
+    background: linear-gradient(90deg, var(--color-primary), var(--color-stats-gradient-to));
+  }
+
+  /* Custom scrollbar */
+  .custom-scrollbar::-webkit-scrollbar {
+    width: 6px;
+  }
+
+  .custom-scrollbar::-webkit-scrollbar-track {
+    @apply bg-muted rounded;
+  }
+
+  .custom-scrollbar::-webkit-scrollbar-thumb {
+    background: color-mix(in oklch, var(--color-muted-foreground) 50%, transparent);
+    @apply rounded;
+  }
+
+  .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+    background: var(--color-muted-foreground);
+  }
+
+  /* Loading skeleton */
+  .loading-skeleton {
+    @apply bg-muted rounded animate-pulse;
+  }
+}
+
+/* Custom animations */
+@layer utilities {
+  @keyframes slide-in {
+    from {
+      opacity: 0;
+      transform: translateY(10px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  @keyframes pulse-slow {
+    0%, 100% {
+      opacity: 1;
+    }
+    50% {
+      opacity: 0.6;
+    }
+  }
+
+  @keyframes shimmer {
+    0% {
+      background-position: -200px 0;
+    }
+    100% {
+      background-position: calc(200px + 100%) 0;
+    }
+  }
+
+  .animate-slide-in {
+    animation: slide-in 0.5s ease-out;
+  }
+
+  .animate-pulse-slow {
+    animation: pulse-slow 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  }
+
+  .animate-shimmer {
+    background: linear-gradient(
+      90deg,
+      transparent,
+      color-mix(in oklch, var(--color-foreground) 10%, transparent),
+      transparent
+    );
+    background-size: 200px 100%;
+    animation: shimmer 1.5s infinite;
+  }
+
+  /* Smooth transitions for theme changes */
+  .theme-transition {
+    transition: background-color 0.3s ease, color 0.3s ease, border-color 0.3s ease;
+  }
+}
+
+/* Responsive design helpers */
+@media (max-width: 768px) {
+  .mobile-stack {
+    @apply flex-col gap-2;
+  }
+  
+  .mobile-hide {
+    @apply hidden;
+  }
+  
+  .stats-card {
+    @apply p-4;
+  }
+}
+
+@media (min-width: 769px) {
+  .desktop-hide {
+    @apply hidden;
+  }
+}
+
+/* Print styles */
+@media print {
+  .no-print {
+    display: none !important;
+  }
+}
+
+/* Focus styles for accessibility */
+@layer utilities {
+  .focus-ring {
+    @apply focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2;
+  }
+
+  .focus-ring-inset {
+    @apply focus:outline-none focus:ring-2 focus:ring-ring focus:ring-inset;
+  }
+}
+
+/* Enhanced hover and focus states */
+@layer components {
+  .interactive-element {
+    @apply transition-all duration-200 ease-in-out;
+  }
+
+  .interactive-element:hover {
+    @apply scale-[1.02] shadow-sm;
+  }
+
+  .interactive-element:active {
+    @apply scale-[0.98];
+  }
+
+  .button-hover {
+    @apply hover:bg-accent hover:text-accent-foreground;
+  }
+
+  .card-hover {
+    @apply hover:shadow-md hover:-translate-y-0.5;
+  }
+}
+
+/* Add this to your globals.css - COMPLETE DROPDOWN FIX */
+
+/* Force dropdowns to use body as portal root and highest z-index */
+[data-radix-select-content] {
+  position: fixed !important;
+  z-index: 999999 !important;
+  will-change: transform;
+  max-height: min(var(--radix-select-content-available-height), 300px) !important;
+  overflow-y: auto !important;
+}
+
+[data-radix-popper-content-wrapper] {
+  z-index: 999999 !important;
+  position: fixed !important;
+}
+
+[data-radix-select-viewport] {
+  max-height: 300px !important;
+  overflow-y: auto !important;
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-muted-foreground) transparent;
+}
+
+/* Custom scrollbar for dropdowns */
+[data-radix-select-viewport]::-webkit-scrollbar {
+  width: 6px;
+}
+
+[data-radix-select-viewport]::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+[data-radix-select-viewport]::-webkit-scrollbar-thumb {
+  background-color: var(--color-muted-foreground);
+  border-radius: 3px;
+}
+
+[data-radix-select-viewport]::-webkit-scrollbar-thumb:hover {
+  background-color: var(--color-foreground);
+}
+
+/* Ensure dropdown trigger doesn't interfere */
+[data-radix-select-trigger] {
+  position: relative;
+  z-index: 1;
+}
+
+/* Fix for nested scrollable containers */
+.dropdown-container {
+  position: relative;
+  overflow: visible !important;
+}
+
+/* Prevent overflow issues in cards and containers */
+.time-entries-container {
+  overflow: visible !important;
+}
+
+.time-entries-container .stats-card {
+  overflow: visible !important;
+}
+
+/* Specific fix for sticky elements and dropdowns */
+.sticky-filter-section {
+  overflow: visible !important;
+  z-index: 20;
+}
+
+.sticky-filter-section [data-radix-select-content] {
+  z-index: 999999 !important;
+}
+
+/* Ensure proper layering */
+.page-container {
+  position: relative;
+  z-index: 1;
+}
+
+.sticky-header {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background: var(--color-background);
+}
+
+.sticky-filters {
+  position: sticky;
+  top: 80px;
+  z-index: 9;
+  background: var(--color-background);
+}
+
+/* Table container fixes */
+.table-container {
+  position: relative;
+  overflow: visible !important;
+}
+
+.table-container table {
+  table-layout: fixed;
+  width: 100%;
+}
+
+/* Responsive table column widths */
+.table-container th:nth-child(1),
+.table-container td:nth-child(1) {
+  width: 25%;
+  min-width: 200px;
+}
+
+.table-container th:nth-child(2),
+.table-container td:nth-child(2) {
+  width: 25%;
+  min-width: 150px;
+}
+
+.table-container th:nth-child(3),
+.table-container td:nth-child(3) {
+  width: 15%;
+  min-width: 120px;
+}
+
+.table-container th:nth-child(4),
+.table-container td:nth-child(4) {
+  width: 15%;
+  min-width: 100px;
+}
+
+.table-container th:nth-child(5),
+.table-container td:nth-child(5) {
+  width: 10%;
+  min-width: 100px;
+}
+
+.table-container th:nth-child(6),
+.table-container td:nth-child(6) {
+  width: 10%;
+  min-width: 100px;
+}
+
+/* Text overflow handling */
+.truncate-cell {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 0;
+}
+
+/* Expandable cell content */
+.expandable-content {
+  transition: all 0.2s ease;
+  cursor: pointer;
+}
+
+.expandable-content:hover {
+  color: var(--color-primary);
+}
+
+/* Mobile responsive fixes */
+@media (max-width: 1024px) {
+  /* Hide desktop table on mobile */
+  .desktop-table {
+    display: none !important;
+  }
+  
+  /* Show mobile cards */
+  .mobile-cards {
+    display: block !important;
+  }
+  
+  /* Mobile dropdown fixes */
+  [data-radix-select-content] {
+    max-width: calc(100vw - 32px) !important;
+    left: 16px !important;
+    right: 16px !important;
+    width: auto !important;
+  }
+}
+
+@media (min-width: 1025px) {
+  /* Show desktop table */
+  .desktop-table {
+    display: block !important;
+  }
+  
+  /* Hide mobile cards */
+  .mobile-cards {
+    display: none !important;
+  }
+}
+
+/* Additional safety measures for dropdown positioning */
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  overflow-x: hidden;
+}
+
+/* Prevent horizontal scroll when dropdown opens */
+[data-radix-select-content] {
+  max-width: 90vw !important;
+}
+
+/* Smooth transitions for dropdown appearance */
+[data-radix-select-content] {
+  animation-duration: 0.15s !important;
+  animation-timing-function: ease-out !important;
+}
+
+/* Fix for dropdown appearing behind sticky elements */
+[data-radix-select-content] {
+  isolation: isolate;
+}
+
+/* Ensure dropdown doesn't get clipped */
+[data-radix-select-content][data-side="bottom"] {
+  margin-top: 4px;
+}
+
+[data-radix-select-content][data-side="top"] {
+  margin-bottom: 4px;
 }
