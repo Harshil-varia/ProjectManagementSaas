@@ -45,7 +45,7 @@ export default function AdminRatesPage() {
     if (status === 'unauthenticated') {
       router.push('/login')
     } else if (session && session.user.role !== 'ADMIN') {
-      router.push('/dashboard')
+      router.push('/calendar')
     }
   }, [session, status, router])
 

@@ -1,3 +1,4 @@
+//app/reports/projects/page.tsx
 'use client'
 
 import { useEffect, useState } from 'react'
@@ -66,7 +67,7 @@ export default function AdminProjectReportsPage() {
     if (status === 'unauthenticated') {
       router.push('/login')
     } else if (session && session.user.role !== 'ADMIN') {
-      router.push('/dashboard')
+      router.push('/calendar')
     }
   }, [session, status, router])
 
@@ -447,9 +448,6 @@ export default function AdminProjectReportsPage() {
                                 View Report
                               </Button>
                             </Link>
-                            <Button variant="outline" size="sm" disabled>
-                              <Download className="h-4 w-4" />
-                            </Button>
                           </div>
                         </TableCell>
                       </TableRow>

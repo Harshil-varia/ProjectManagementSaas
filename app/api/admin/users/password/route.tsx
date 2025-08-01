@@ -159,7 +159,6 @@ export async function POST(request: NextRequest) {
     }, { status: 500 })
   }
 }
-
 // DELETE - Delete user
 export async function DELETE(request: NextRequest) {
   try {
@@ -205,9 +204,23 @@ export async function DELETE(request: NextRequest) {
       }, { status: 403 })
     }
 
-    // Delete the user
-    await prisma.user.delete({
-      where: { id: userId }
+    // Use a transaction to delete related records first, then the user
+    await prisma.$transaction(async (tx) => {
+      // Delete all rate history records for this user first
+      await tx.rateHistory.deleteMany({
+        where: { userId: userId }
+      })
+
+      // Add any other related record deletions here if needed
+      // Examples (uncomment and adjust based on your actual schema):
+      // await tx.timeEntry.deleteMany({ where: { userId } })
+      // await tx.projectAssignment.deleteMany({ where: { userId } })
+      // await tx.userSession.deleteMany({ where: { userId } })
+
+      // Finally, delete the user
+      await tx.user.delete({
+        where: { id: userId }
+      })
     })
 
     // Log user deletion for audit
@@ -220,6 +233,26 @@ export async function DELETE(request: NextRequest) {
 
   } catch (error) {
     console.error('Failed to delete user:', error)
+    
+    // Log detailed error information for debugging
+    if (error instanceof Error) {
+      console.error('Error message:', error.message)
+      console.error('Error stack:', error.stack)
+    }
+    
+    // Handle specific Prisma errors
+    if (error.code === 'P2003') {
+      return NextResponse.json({
+        error: 'Cannot delete user: user has associated records that must be removed first'
+      }, { status: 400 })
+    }
+    
+    if (error.code === 'P2025') {
+      return NextResponse.json({
+        error: 'User not found'
+      }, { status: 404 })
+    }
+
     return NextResponse.json({
       error: 'Internal server error'
     }, { status: 500 })

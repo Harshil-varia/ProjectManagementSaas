@@ -135,7 +135,7 @@ export default function AdminUsersPage() {
     }
 
     if (session.user.role !== 'ADMIN') {
-      router.push('/dashboard')
+      router.push('/calendar')
       return
     }
 

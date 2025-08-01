@@ -1,3 +1,4 @@
+// app/reports/projects/[id]/page.tsx
 'use client'
 
 import { useEffect, useState } from 'react'
@@ -96,7 +97,7 @@ export default function EnhancedProjectReportPage() {
         setReportData(data)
       } else if (response.status === 403) {
         toast.error('You do not have permission to view this project\'s reports')
-        router.push('/dashboard')
+        router.push('/calendar')
       } else {
         toast.error('Failed to fetch report data')
       }
@@ -119,7 +120,7 @@ export default function EnhancedProjectReportPage() {
         type: 'detailed'
       })
 
-      const response = await fetch(`/api/reports/project/${projectId}/export?${params}`)
+      const response = await fetch(`/api/projects/${projectId}/export?${params}`)
       
       if (response.ok) {
         const blob = await response.blob()

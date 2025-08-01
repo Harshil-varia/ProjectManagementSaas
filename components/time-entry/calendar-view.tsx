@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { ChevronLeft, ChevronRight, Plus, Clock, Eye, EyeOff } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Plus, Clock, Trash2, X } from 'lucide-react'
 import { format, startOfWeek, endOfWeek, eachDayOfInterval, addWeeks, subWeeks, isSameDay, parseISO } from 'date-fns'
 
 interface TimeEntry {
@@ -25,12 +25,12 @@ interface TimeEntry {
 interface CalendarViewProps {
   timeEntries: TimeEntry[]
   onAddEntry: (date: Date) => void
-  onEditEntry: (entry: TimeEntry) => void
+  onDeleteEntry: (id: string) => void
 }
 
-type ViewMode = 'compact' | 'detailed' | 'summary'
+type ViewMode = 'summary' | 'detailed'
 
-export default function CalendarView({ timeEntries, onAddEntry, onEditEntry }: CalendarViewProps) {
+export default function CalendarView({ timeEntries, onAddEntry, onDeleteEntry }: CalendarViewProps) {
   const [currentWeek, setCurrentWeek] = useState(new Date())
   const [weekDays, setWeekDays] = useState<Date[]>([])
   const [viewMode, setViewMode] = useState<ViewMode>('detailed')
@@ -102,34 +102,11 @@ export default function CalendarView({ timeEntries, onAddEntry, onEditEntry }: C
     return format(parseISO(timeString), 'HH:mm')
   }
 
-  const renderCompactView = (date: Date) => {
-    const projects = getProjectsForDate(date)
-    const totalMinutes = projects.reduce((sum, p) => sum + p.duration, 0)
-    
-    return (
-      <div className="space-y-1">
-        {projects.slice(0, 4).map((projectData) => (
-          <div
-            key={projectData.project.id}
-            className="flex items-center justify-between p-1 rounded text-xs hover:bg-gray-100 cursor-pointer"
-            style={{ borderLeft: `3px solid ${projectData.project.color}` }}
-            onClick={() => onEditEntry(projectData.entries[0])}
-          >
-            <span className="truncate font-medium" title={projectData.project.name}>
-              {projectData.project.name}
-            </span>
-            <Badge variant="secondary" className="text-xs ml-1">
-              {formatDuration(projectData.duration)}
-            </Badge>
-          </div>
-        ))}
-        {projects.length > 4 && (
-          <div className="text-xs text-gray-500 text-center py-1">
-            +{projects.length - 4} more projects
-          </div>
-        )}
-      </div>
-    )
+  const handleDelete = (e: React.MouseEvent, entryId: string) => {
+    e.stopPropagation() // Prevent triggering edit when clicking delete
+    if (confirm('Are you sure you want to delete this time entry?')) {
+      onDeleteEntry(entryId)
+    }
   }
 
   const renderSummaryView = (date: Date) => {
@@ -150,11 +127,24 @@ export default function CalendarView({ timeEntries, onAddEntry, onEditEntry }: C
           {projects.map((projectData) => (
             <div
               key={projectData.project.id}
-              className="w-3 h-3 rounded-full cursor-pointer hover:scale-110 transition-transform"
-              style={{ backgroundColor: projectData.project.color }}
-              title={`${projectData.project.name}: ${formatDuration(projectData.duration)}`}
-              onClick={() => onEditEntry(projectData.entries[0])}
-            />
+              className="group relative"
+            >
+              <div
+                className="w-4 h-4 rounded-full cursor-pointer hover:scale-110 transition-transform group-hover:opacity-80"
+                style={{ backgroundColor: projectData.project.color }}
+                title={`${projectData.project.name}: ${formatDuration(projectData.duration)}`}
+    
+              />
+              {projectData.entries.length === 1 && (
+                <button
+                  className="absolute -top-1 -right-1 w-3 h-3 bg-red-500 text-white rounded-full text-xs opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center hover:bg-red-600"
+                  onClick={(e) => handleDelete(e, projectData.entries[0].id)}
+                  title="Delete entry"
+                >
+                  <X className="w-2 h-2" />
+                </button>
+              )}
+            </div>
           ))}
         </div>
       </div>
@@ -170,17 +160,32 @@ export default function CalendarView({ timeEntries, onAddEntry, onEditEntry }: C
         {entries.slice(0, 6).map((entry) => (
           <div
             key={entry.id}
-            className="text-xs p-1 rounded cursor-pointer hover:bg-gray-100"
+            className="group text-xs p-1 rounded cursor-pointer hover:bg-gray-100 relative"
             style={{ borderLeft: `2px solid ${entry.project.color}` }}
-            onClick={() => onEditEntry(entry)}
           >
-            <div className="flex justify-between items-start">
-              <span className="font-medium truncate">{entry.project.name}</span>
-              <span className="text-gray-500 ml-1">{formatDuration(entry.duration || 0)}</span>
+            <div className="flex justify-between items-start pr-4">
+              <div className="flex-1 min-w-0">
+                <div className="flex justify-between items-start">
+                  <span className="font-medium truncate">{entry.project.name}</span>
+                  <span className="text-gray-500 ml-1 flex-shrink-0">{formatDuration(entry.duration || 0)}</span>
+                </div>
+                <div className="text-gray-600">
+                  {formatTime(entry.startTime)} - {entry.endTime ? formatTime(entry.endTime) : '...'}
+                </div>
+                {entry.description && (
+                  <div className="text-gray-500 text-xs truncate mt-0.5" title={entry.description}>
+                    {entry.description}
+                  </div>
+                )}
+              </div>
             </div>
-            <div className="text-gray-600">
-              {formatTime(entry.startTime)} - {entry.endTime ? formatTime(entry.endTime) : '...'}
-            </div>
+            <button
+              className="absolute top-1 right-1 w-4 h-4 bg-red-500 text-white rounded-full text-xs opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center hover:bg-red-600"
+              onClick={(e) => handleDelete(e, entry.id)}
+              title="Delete entry"
+            >
+              <X className="w-2.5 h-2.5" />
+            </button>
           </div>
         ))}
         {entries.length > 6 && (
@@ -234,7 +239,6 @@ export default function CalendarView({ timeEntries, onAddEntry, onEditEntry }: C
               </SelectContent>
             </Select>
             
-            
             <Button variant="outline" size="sm" onClick={goToPreviousWeek}>
               <ChevronLeft className="h-4 w-4" />
             </Button>
@@ -270,8 +274,7 @@ export default function CalendarView({ timeEntries, onAddEntry, onEditEntry }: C
               <div
                 key={day.toISOString()}
                 className={`border rounded-lg p-2 ${
-                  viewMode === 'summary' ? 'min-h-[100px]' : 
-                  viewMode === 'compact' ? 'min-h-[140px]' : 'min-h-[180px]'
+                  viewMode === 'summary' ? 'min-h-[120px]' : 'min-h-[180px]'
                 } ${isToday ? 'border-blue-500 bg-blue-50' : 'border-gray-200'}`}
               >
                 <div className="flex items-center justify-between mb-2">
@@ -285,15 +288,15 @@ export default function CalendarView({ timeEntries, onAddEntry, onEditEntry }: C
                   <Button
                     size="sm"
                     variant="ghost"
-                    className="h-5 w-5 p-0"
+                    className="h-5 w-5 p-0 hover:bg-blue-100"
                     onClick={() => onAddEntry(day)}
+                    title="Add new entry"
                   >
                     <Plus className="h-3 w-3" />
                   </Button>
                 </div>
                 
                 {viewMode === 'summary' && renderSummaryView(day)}
-                {viewMode === 'compact' && renderCompactView(day)}
                 {viewMode === 'detailed' && renderDetailedView(day)}
               </div>
             )

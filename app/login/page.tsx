@@ -26,7 +26,7 @@ export default function LoginPage() {
       })
 
       if (result?.ok) {
-        router.push('/dashboard')
+        router.push('/calendar')
       } else {
         alert('Invalid credentials')
       }

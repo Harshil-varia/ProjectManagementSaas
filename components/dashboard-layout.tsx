@@ -21,8 +21,19 @@ import {
   ChevronRight,
   Menu,
   X,
-  LogOut
+  LogOut,
+  Eye,
+  Edit
 } from 'lucide-react'
+
+interface ProjectPermission {
+  id: string
+  name: string
+  color: string
+  canView: boolean
+  canEdit: boolean
+  permissions: string[] // Array of PermissionType values
+}
 
 interface NavigationItem {
   name: string
@@ -30,55 +41,69 @@ interface NavigationItem {
   icon: React.ComponentType<{ className?: string }>
   badge?: string
   adminOnly?: boolean
+  employeeOnly?: boolean // New property for employee-only items
   children?: NavigationItem[]
 }
 
-const navigation: NavigationItem[] = [
-  {
-    name: 'Dashboard',
-    href: '/dashboard',
-    icon: LayoutDashboard,
-  },
+// Custom hook to fetch user project permissions
+const useProjectPermissions = () => {
+  const { data: session } = useSession()
+  const [projectPermissions, setProjectPermissions] = useState<ProjectPermission[]>([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    const fetchProjectPermissions = async () => {
+      if (!session) {
+        setLoading(false)
+        return
+      }
+
+      try {
+        const response = await fetch('/api/users/project-permissions')
+        if (response.ok) {
+          const data = await response.json()
+          setProjectPermissions(data.projects || [])
+        }
+      } catch (error) {
+        console.error('Failed to fetch project permissions:', error)
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    fetchProjectPermissions()
+  }, [session])
+
+  return { projectPermissions, loading }
+}
+
+// Base navigation structure
+const getBaseNavigation = (): NavigationItem[] => [
   {
     name: 'Time Sheet',
     href: '/calendar',
     icon: Calendar,
-  },
-  {
-    name: 'Time Entries',
-    href: '/time-entries',
-    icon: FolderOpen,
+    adminOnly: false, // Only employees need this
+    employeeOnly: true, // New property to indicate employee-only items
   },
   {
     name: 'Projects',
     href: '/projects',
     icon: FolderOpen,
+    adminOnly: true,
+    employeeOnly: false,
   },
   {
     name: 'Profile',
     href: '/profile',
     icon: Users,
+    // No restrictions - available to everyone
   },
   {
-    name: 'Reports',
+    name: 'User Timesheets',
     href: '/reports',
-    icon: BarChart3,
-    adminOnly: true,
-    children: [
-      {
-        name: 'User Timesheets',
-        href: '/reports',
-        icon: Users,
-        adminOnly: true
-      },
-      {
-        name: 'Project Reports',
-        href: '/reports/projects',
-        icon: FolderOpen,
-        adminOnly: true,
-        badge: ''
-      }
-    ]
+    icon: Users,
+    adminOnly: true
   },
   {
     name: 'Administration',
@@ -107,8 +132,14 @@ const navigation: NavigationItem[] = [
         badge: ''
       },
       {
-        name: 'Budget Management',
+        name: 'Project Management',
         href: '/admin/budgets',
+        icon: FolderOpen,
+        adminOnly: true,
+        badge: ''
+      }, {
+        name: 'Monthly Summary',
+        href: '/admin/monthly-summary',
         icon: DollarSign,
         adminOnly: true,
         badge: ''
@@ -126,17 +157,68 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
   const pathname = usePathname()
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [expandedItems, setExpandedItems] = useState<Set<string>>(new Set())
+  const { projectPermissions, loading: permissionsLoading } = useProjectPermissions()
 
   useEffect(() => {
     // Auto-expand current section
-    const currentItem = navigation.find(item => 
+    const allNavigation = getNavigationWithPermissions()
+    const currentItem = allNavigation.find(item => 
       pathname.startsWith(item.href) || 
       item.children?.some(child => pathname.startsWith(child.href))
     )
     if (currentItem && currentItem.children) {
       setExpandedItems(new Set([currentItem.name]))
     }
-  }, [pathname])
+  }, [pathname, projectPermissions])
+
+  const getNavigationWithPermissions = (): NavigationItem[] => {
+    const baseNavigation = getBaseNavigation()
+    
+    // If user has project permissions but is not admin, add project reports navigation
+    if (projectPermissions.length > 0 && session?.user?.role !== 'ADMIN') {
+      const projectReportsChildren: NavigationItem[] = projectPermissions.map(project => {
+        // Determine icon and badge based on permissions
+        let icon = Eye
+        let badge = 'View'
+        
+        if (project.permissions.includes('FULL_ACCESS')) {
+          icon = Shield
+          badge = 'Full Access'
+        } else if (project.permissions.includes('EDIT_BUDGETS')) {
+          icon = Edit
+          badge = 'Edit Budget'
+        } else if (project.permissions.includes('VIEW_REPORTS')) {
+          icon = Eye
+          badge = 'View'
+        }
+
+        return {
+          name: project.name,
+          href: `/reports/projects/${project.id}`,
+          icon,
+          badge
+        }
+      })
+
+      // Add or update My Project Reports section
+      const myProjectReportsItem: NavigationItem = {
+        name: 'My Project Reports',
+        href: '/my-reports',
+        icon: BarChart3,
+        children: projectReportsChildren
+      }
+
+      // Insert after Profile and before admin sections
+      const profileIndex = baseNavigation.findIndex(item => item.href === '/profile')
+      if (profileIndex !== -1) {
+        baseNavigation.splice(profileIndex + 1, 0, myProjectReportsItem)
+      } else {
+        baseNavigation.push(myProjectReportsItem)
+      }
+    }
+
+    return baseNavigation
+  }
 
   const toggleExpanded = (itemName: string) => {
     const newExpanded = new Set(expandedItems)
@@ -153,17 +235,29 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
     if (item.children) {
       return item.children.some(child => pathname.startsWith(child.href))
     }
-    return pathname.startsWith(item.href) && item.href !== '/dashboard'
+    return pathname.startsWith(item.href) && item.href !== '/calendar'
   }
 
   const canAccessItem = (item: NavigationItem): boolean => {
+    const userRole = session?.user?.role
+    
     // Profile is accessible to all authenticated users
     if (item.href === '/profile') {
       return true
     }
 
-    // Admin-only items
-    if (item.adminOnly && session?.user?.role !== 'ADMIN') {
+    // My Project Reports is accessible to employees with project permissions
+    if (item.name === 'My Project Reports') {
+      return projectPermissions.length > 0 && userRole !== 'ADMIN'
+    }
+
+    // Admin-only items (Projects, Reports, Administration)
+    if (item.adminOnly && userRole !== 'ADMIN') {
+      return false
+    }
+
+    // Employee-only items (Time Sheet)
+    if (item.employeeOnly && userRole === 'ADMIN') {
       return false
     }
 
@@ -181,12 +275,18 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
       .filter(item => !item.children || item.children.length > 0)
   }
 
-  const filteredNavigation = filterNavigation(navigation)
+  const navigationWithPermissions = getNavigationWithPermissions()
+  const filteredNavigation = filterNavigation(navigationWithPermissions)
 
   const NavItem = ({ item, level = 0 }: { item: NavigationItem; level?: number }) => {
     const isActive = isItemActive(item)
     const isExpanded = expandedItems.has(item.name)
     const hasChildren = item.children && item.children.length > 0
+
+    // Find project color if this is a project report item
+    const projectColor = projectPermissions.find(p => 
+      item.href.includes(p.id)
+    )?.color
 
     return (
       <div>
@@ -209,13 +309,27 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
           )}
         >
           <div className="flex items-center">
-            <item.icon className={cn(
-              'mr-3 h-5 w-5 flex-shrink-0',
-              isActive ? 'text-blue-600' : 'text-gray-400 group-hover:text-gray-600'
-            )} />
+            {projectColor ? (
+              <div
+                className="mr-3 w-4 h-4 rounded-full flex-shrink-0"
+                style={{ backgroundColor: projectColor }}
+              />
+            ) : (
+              <item.icon className={cn(
+                'mr-3 h-5 w-5 flex-shrink-0',
+                isActive ? 'text-blue-600' : 'text-gray-400 group-hover:text-gray-600'
+              )} />
+            )}
             <span>{item.name}</span>
             {item.badge && (
-              <Badge variant="secondary" className="ml-2 text-xs">
+              <Badge 
+                variant={
+                  item.badge === 'Full Access' ? 'default' : 
+                  item.badge === 'Edit Budget' ? 'secondary' : 
+                  'outline'
+                } 
+                className="ml-2 text-xs"
+              >
                 {item.badge}
               </Badge>
             )}
@@ -282,9 +396,15 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
 
           {/* Navigation */}
           <nav className="flex-1 px-4 py-4 space-y-2 overflow-y-auto">
-            {filteredNavigation.map((item) => (
-              <NavItem key={item.name} item={item} />
-            ))}
+            {permissionsLoading ? (
+              <div className="flex items-center justify-center p-4">
+                <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600"></div>
+              </div>
+            ) : (
+              filteredNavigation.map((item) => (
+                <NavItem key={item.name} item={item} />
+              ))
+            )}
           </nav>
 
           {/* User info */}
@@ -312,6 +432,11 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
                       {session.user.role}
                     </Badge>
                     <span className="text-xs text-gray-400">View Profile</span>
+                    {projectPermissions.length > 0 && session.user.role !== 'ADMIN' && (
+                      <span className="text-xs text-blue-500">
+                        {projectPermissions.length} Projects
+                      </span>
+                    )}
                   </div>
                 </div>
               </Link>

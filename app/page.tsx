@@ -12,7 +12,7 @@ export default function HomePage() {
     if (status === 'loading') return
 
     if (session) {
-      router.push('/dashboard')
+      router.push('/calendar')
     } else {
       router.push('/login')
     }

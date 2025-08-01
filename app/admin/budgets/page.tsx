@@ -1,8 +1,11 @@
+//app/admin/budgets/page.tsx
+
 'use client'
 
 import { useEffect, useState, useMemo } from 'react'
 import { useSession } from 'next-auth/react'
 import { useRouter } from 'next/navigation'
+import Link from 'next/link'
 import DashboardLayout from '@/components/dashboard-layout'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -24,17 +27,19 @@ import {
   Target, 
   Plus,
   Check,
-  X,
-  Eye,
-  EyeOff,
-  RefreshCw
+  BarChart3,
+  Clock,
+  Users
 } from 'lucide-react'
 import { toast } from 'sonner'
 
-interface Project {
+// Use the same interface as the project reports page
+interface ProjectSummary {
   id: string
   name: string
+  description: string | null
   color: string
+  active: boolean
   totalBudget: number
   q1Budget: number
   q2Budget: number
@@ -44,7 +49,12 @@ interface Project {
   q2Spent: number
   q3Spent: number
   q4Spent: number
-  active: boolean
+  totalSpent: number
+  totalHours: number
+  employeeCount: number
+  entryCount: number
+  budgetUtilization: number
+  lastActivity: string | null
 }
 
 interface BudgetForm {
@@ -55,97 +65,83 @@ interface BudgetForm {
   q4Budget: string
 }
 
-// ✅ FIXED: Safe utility functions matching the detailed report page
-const safeNumber = (value: any): number => {
-  const num = Number(value)
-  return isFinite(num) && !isNaN(num) ? num : 0
-}
-
-const formatCurrency = (amount: any): string => {
-  const safeAmount = safeNumber(amount)
+// Use the same utility functions as the project reports page
+const formatCurrency = (amount: number) => {
   return new Intl.NumberFormat('en-US', {
     style: 'currency',
     currency: 'USD',
     minimumFractionDigits: 0,
     maximumFractionDigits: 0
-  }).format(safeAmount)
+  }).format(amount)
 }
 
-const formatCurrencyWithCents = (amount: any): string => {
-  const safeAmount = safeNumber(amount)
+const formatCurrencyWithCents = (amount: number): string => {
   return new Intl.NumberFormat('en-US', {
     style: 'currency',
     currency: 'USD',
     minimumFractionDigits: 2,
     maximumFractionDigits: 2
-  }).format(safeAmount)
+  }).format(amount)
 }
 
-const getBudgetUtilization = (spent: any, budget: any): number => {
-  const safeSpent = safeNumber(spent)
-  const safeBudget = safeNumber(budget)
-  
-  if (safeBudget <= 0) return safeSpent > 0 ? 999 : 0 // Cap at 999% for display
-  
-  const utilization = (safeSpent / safeBudget) * 100
-  return Math.min(utilization, 999) // Cap at 999% to prevent UI issues
+const formatHours = (hours: number) => {
+  return `${hours.toFixed(1)}h`
 }
 
-// ✅ FIXED: Match the budget status logic from the detailed report
+// Use the same budget status logic as the project reports page
 const getBudgetStatus = (utilization: number) => {
   if (utilization >= 100) return { 
+    status: 'Over Budget', 
     color: 'text-red-600', 
-    bg: 'bg-red-100', 
-    label: 'Over Budget',
-    variant: 'destructive' as const
+    bg: 'bg-red-100',
+    variant: 'destructive' as const,
+    icon: AlertTriangle 
   }
   if (utilization >= 90) return { 
-    color: 'text-red-500', 
-    bg: 'bg-red-50', 
-    label: 'Critical',
-    variant: 'destructive' as const
+    status: 'Critical', 
+    color: 'text-orange-600', 
+    bg: 'bg-orange-100',
+    variant: 'destructive' as const,
+    icon: AlertTriangle 
   }
   if (utilization >= 75) return { 
+    status: 'Warning', 
     color: 'text-yellow-600', 
-    bg: 'bg-yellow-50', 
-    label: 'Warning',
-    variant: 'secondary' as const
+    bg: 'bg-yellow-100',
+    variant: 'secondary' as const,
+    icon: AlertTriangle 
   }
   return { 
+    status: 'On Track', 
     color: 'text-green-600', 
-    bg: 'bg-green-50', 
-    label: 'On Track',
-    variant: 'secondary' as const
+    bg: 'bg-green-100',
+    variant: 'default' as const,
+    icon: Check 
   }
 }
 
-const getTotalSpent = (project: Project): number => {
-  return safeNumber(project.q1Spent) + 
-         safeNumber(project.q2Spent) + 
-         safeNumber(project.q3Spent) + 
-         safeNumber(project.q4Spent)
-}
-
-const getTotalBudget = (project: Project): number => {
-  return safeNumber(project.q1Budget) + 
-         safeNumber(project.q2Budget) + 
-         safeNumber(project.q3Budget) + 
-         safeNumber(project.q4Budget)
-}
-
-const hasBudgetSet = (project: Project): boolean => {
-  return getTotalBudget(project) > 0 || safeNumber(project.totalBudget) > 0
+const getActivityStatus = (lastActivity: string | null) => {
+  if (!lastActivity) return 'No Activity'
+  
+  const daysSince = Math.floor(
+    (new Date().getTime() - new Date(lastActivity).getTime()) / (1000 * 60 * 60 * 24)
+  )
+  
+  if (daysSince === 0) return 'Today'
+  if (daysSince === 1) return 'Yesterday'
+  if (daysSince <= 7) return `${daysSince} days ago`
+  if (daysSince <= 30) return `${Math.floor(daysSince / 7)} weeks ago`
+  return `${Math.floor(daysSince / 30)} months ago`
 }
 
 export default function AdminBudgetsPage() {
   const { data: session, status } = useSession()
   const router = useRouter()
   
-  // State management
-  const [allProjects, setAllProjects] = useState<Project[]>([])
+  // State management - use the same structure as project reports page
+  const [projects, setProjects] = useState<ProjectSummary[]>([])
   const [loading, setLoading] = useState(true)
-  const [refreshing, setRefreshing] = useState(false)
-  const [editingProject, setEditingProject] = useState<Project | null>(null)
+  const [editingProject, setEditingProject] = useState<ProjectSummary | null>(null)
   const [budgetForm, setBudgetForm] = useState<BudgetForm>({
     totalBudget: '',
     q1Budget: '',
@@ -154,100 +150,70 @@ export default function AdminBudgetsPage() {
     q4Budget: ''
   })
   const [updating, setUpdating] = useState(false)
-  const [showAllProjects, setShowAllProjects] = useState(false)
-  const [selectedProjectIds, setSelectedProjectIds] = useState<Set<string>>(new Set())
 
-  // Computed values
+  // Computed values using the same logic as project reports
   const projectsWithBudget = useMemo(() => 
-    allProjects.filter(hasBudgetSet), 
-    [allProjects]
+    projects.filter(p => p.totalBudget > 0 || (p.q1Budget + p.q2Budget + p.q3Budget + p.q4Budget) > 0), 
+    [projects]
   )
 
   const projectsWithoutBudget = useMemo(() => 
-    allProjects.filter(p => !hasBudgetSet(p)), 
-    [allProjects]
+    projects.filter(p => p.totalBudget === 0 && (p.q1Budget + p.q2Budget + p.q3Budget + p.q4Budget) === 0), 
+    [projects]
   )
 
   const budgetStats = useMemo(() => {
-    const projects = projectsWithBudget
-    const totalBudget = projects.reduce((sum, p) => sum + getTotalBudget(p), 0)
-    const totalSpent = projects.reduce((sum, p) => sum + getTotalSpent(p), 0)
-    const overBudget = projects.filter(p => 
-      getBudgetUtilization(getTotalSpent(p), getTotalBudget(p)) >= 100
-    ).length
-    const atRisk = projects.filter(p => {
-      const util = getBudgetUtilization(getTotalSpent(p), getTotalBudget(p))
-      return util >= 75 && util < 100
-    }).length
+    const totalBudget = projects.reduce((sum, p) => sum + p.totalBudget, 0)
+    const totalSpent = projects.reduce((sum, p) => sum + p.totalSpent, 0)
+    const overBudget = projects.filter(p => p.budgetUtilization >= 100).length
+    const atRisk = projects.filter(p => p.budgetUtilization >= 75 && p.budgetUtilization < 100).length
 
     return { totalBudget, totalSpent, overBudget, atRisk, projectCount: projects.length }
-  }, [projectsWithBudget])
+  }, [projects])
 
-  // Effects
+  // Redirect non-admin users
   useEffect(() => {
     if (status === 'unauthenticated') {
       router.push('/login')
     } else if (session && session.user.role !== 'ADMIN') {
-      router.push('/dashboard')
+      router.push('/calendar')
     }
   }, [session, status, router])
 
   useEffect(() => {
     if (session && session.user.role === 'ADMIN') {
-      fetchProjects()
+      fetchProjectSummaries()
     }
   }, [session])
 
-  // API functions
-  const fetchProjects = async () => {
+  // Use the same API endpoint as the project reports page
+  const fetchProjectSummaries = async () => {
     try {
       setLoading(true)
-      const response = await fetch('/api/projects?include=budget')
+      const response = await fetch('/api/projects/summaries')
       if (response.ok) {
         const data = await response.json()
-        setAllProjects(Array.isArray(data) ? data : [])
+        setProjects(data.projects || [])
       } else {
-        toast.error('Failed to fetch projects')
+        toast.error('Failed to fetch project summaries')
       }
     } catch (error) {
-      console.error('Failed to fetch projects:', error)
-      toast.error('Failed to fetch projects')
+      console.error('Failed to fetch project summaries:', error)
+      toast.error('Failed to fetch project summaries')
     } finally {
       setLoading(false)
     }
   }
 
-  const refreshData = async () => {
-    try {
-      setRefreshing(true)
-      const response = await fetch('/api/projects?include=budget&_t=' + Date.now()) // Add timestamp to prevent caching
-      if (response.ok) {
-        const data = await response.json()
-        setAllProjects(Array.isArray(data) ? data : [])
-        console.log('Projects refreshed:', data?.length || 0, 'projects loaded')
-      } else {
-        console.error('Failed to refresh projects:', response.status)
-        toast.error('Failed to refresh projects')
-      }
-    } catch (error) {
-      console.error('Error refreshing projects:', error)
-      toast.error('Failed to refresh projects')
-    } finally {
-      setRefreshing(false)
-    }
-  }
-
-
-  
   // Event handlers
-  const handleEditBudget = (project: Project) => {
+  const handleEditBudget = (project: ProjectSummary) => {
     setEditingProject(project)
     setBudgetForm({
-      totalBudget: safeNumber(project.totalBudget).toString(),
-      q1Budget: safeNumber(project.q1Budget).toString(),
-      q2Budget: safeNumber(project.q2Budget).toString(),
-      q3Budget: safeNumber(project.q3Budget).toString(),
-      q4Budget: safeNumber(project.q4Budget).toString()
+      totalBudget: project.totalBudget.toString(),
+      q1Budget: project.q1Budget.toString(),
+      q2Budget: project.q2Budget.toString(),
+      q3Budget: project.q3Budget.toString(),
+      q4Budget: project.q4Budget.toString()
     })
   }
 
@@ -273,10 +239,8 @@ export default function AdminBudgetsPage() {
     }
 
     setUpdating(true)
-    console.log('Updating budget for project:', editingProject.id)
 
     try {
-      // ✅ IMPROVED: Use direct API call with better error handling
       const response = await fetch(`/api/budgets/${editingProject.id}`, {
         method: 'PUT',
         headers: {
@@ -290,36 +254,8 @@ export default function AdminBudgetsPage() {
           q4Budget
         }),
       })
-
-      console.log('Budget API Response status:', response.status)
       
       if (response.ok) {
-        const responseData = await response.json()
-        console.log('Budget API Success Response:', responseData)
-        
-        // ✅ IMPROVED: Immediately update state with the new values
-        setAllProjects(prev => {
-          const updated = prev.map(p => 
-            p.id === editingProject.id 
-              ? { 
-                  ...p, 
-                  totalBudget,
-                  q1Budget,
-                  q2Budget,
-                  q3Budget,
-                  q4Budget,
-                  // Preserve existing spent values or use from response
-                  q1Spent: responseData.project?.q1Spent ?? p.q1Spent,
-                  q2Spent: responseData.project?.q2Spent ?? p.q2Spent,
-                  q3Spent: responseData.project?.q3Spent ?? p.q3Spent,
-                  q4Spent: responseData.project?.q4Spent ?? p.q4Spent
-                }
-              : p
-          )
-          console.log('State updated. New project data:', updated.find(p => p.id === editingProject.id))
-          return updated
-        })
-
         toast.success('Budget updated successfully')
         setEditingProject(null)
         setBudgetForm({
@@ -330,15 +266,11 @@ export default function AdminBudgetsPage() {
           q4Budget: ''
         })
         
-        // ✅ IMPROVED: Delayed refresh to ensure database consistency
-        setTimeout(async () => {
-          console.log('Performing delayed refresh to sync with database...')
-          await refreshData()
-        }, 1000)
+        // Refresh the data using the same method as project reports
+        await fetchProjectSummaries()
         
       } else {
         const error = await response.json()
-        console.error('Budget API Error Response:', error)
         toast.error(error.error || 'Failed to update budget')
       }
     } catch (error) {
@@ -347,25 +279,6 @@ export default function AdminBudgetsPage() {
     } finally {
       setUpdating(false)
     }
-  }
-
-  const handleSelectProject = (projectId: string) => {
-    const newSelection = new Set(selectedProjectIds)
-    if (newSelection.has(projectId)) {
-      newSelection.delete(projectId)
-    } else {
-      newSelection.add(projectId)
-    }
-    setSelectedProjectIds(newSelection)
-  }
-
-  const handleBulkEditSelected = () => {
-    if (selectedProjectIds.size === 0) {
-      toast.error('Please select at least one project')
-      return
-    }
-    // Could implement bulk edit functionality here
-    toast.info('Bulk edit functionality coming soon')
   }
 
   // Loading and access control
@@ -402,159 +315,74 @@ export default function AdminBudgetsPage() {
               Manage quarterly budgets and track spending for projects
             </p>
           </div>
-          <div className="flex items-center gap-3">
-            <Button 
-              variant="outline" 
-              size="sm" 
-              onClick={refreshData}
-              disabled={refreshing}
-            >
-              <RefreshCw className={`h-4 w-4 mr-2 ${refreshing ? 'animate-spin' : ''}`} />
-              Refresh
-            </Button>
-            {process.env.NODE_ENV === 'development' && (
-              <Button 
-                variant="outline" 
-                size="sm" 
-                onClick={async () => {
-                  try {
-                    console.log('Testing API endpoints...')
-                    
-                    // Test 1: General projects endpoint
-                    const response1 = await fetch('/api/projects?debug=true&_t=' + Date.now())
-                    const data1 = await response1.json()
-                    console.log('1. General Projects API:', data1)
-                    
-                    // Test 2: Projects with budget details
-                    const response2 = await fetch('/api/projects?include=budget&detailed=true&_t=' + Date.now())
-                    const data2 = await response2.json()
-                    console.log('2. Projects with Budget API:', data2)
-                    
-                    // Test 3: If we have projects, test individual project detail
-                    if (allProjects.length > 0) {
-                      const firstProject = allProjects[0]
-                      const response3 = await fetch(`/api/projects/${firstProject.id}/detailed?_t=${Date.now()}`)
-                      const data3 = await response3.json()
-                      console.log('3. Individual Project Detail API:', data3)
-                    }
-                    
-                    alert(`API tests complete. ${Array.isArray(data1) ? data1.length : 'non-array'} projects from general API, ${Array.isArray(data2) ? data2.length : 'non-array'} from budget API. Check console for details.`)
-                  } catch (error) {
-                    console.error('API Test failed:', error)
-                    alert('API test failed - check console')
-                  }
-                }}
-              >
-                Test All APIs
-              </Button>
-            )}
-            <Badge variant="destructive" className="flex items-center gap-2">
-              <Shield className="h-4 w-4" />
-              Admin Only
-            </Badge>
-          </div>
+          <Badge variant="destructive" className="flex items-center gap-2">
+            <Shield className="h-4 w-4" />
+            Admin Only
+          </Badge>
         </div>
 
-        {/* Debug Info (remove in production) */}
-        {process.env.NODE_ENV === 'development' && editingProject && (
-          <Card className="border-blue-200 bg-blue-50">
-            <CardHeader>
-              <CardTitle className="text-sm text-blue-800">Current Project Debug</CardTitle>
+        {/* Budget Overview - Same as project reports page */}
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">Total Budget</CardTitle>
+              <DollarSign className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
-            <CardContent className="text-xs text-blue-700 space-y-1">
-              <div>Project: {editingProject.name}</div>
-              <div>Total Budget: {formatCurrency(editingProject.totalBudget)}</div>
-              <div>Q1: Budget {formatCurrency(editingProject.q1Budget)} | Spent {formatCurrency(editingProject.q1Spent)}</div>
-              <div>Q2: Budget {formatCurrency(editingProject.q2Budget)} | Spent {formatCurrency(editingProject.q2Spent)}</div>
-              <div>Q3: Budget {formatCurrency(editingProject.q3Budget)} | Spent {formatCurrency(editingProject.q3Spent)}</div>
-              <div>Q4: Budget {formatCurrency(editingProject.q4Budget)} | Spent {formatCurrency(editingProject.q4Spent)}</div>
-              <div>Total Spent: {formatCurrency(getTotalSpent(editingProject))}</div>
-              <div>Utilization: {getBudgetUtilization(getTotalSpent(editingProject), getTotalBudget(editingProject)).toFixed(1)}%</div>
+            <CardContent>
+              <div className="text-2xl font-bold">
+                {formatCurrency(budgetStats.totalBudget)}
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Across {budgetStats.projectCount} projects
+              </p>
             </CardContent>
           </Card>
-        )}
 
-        {/* Debug Info (remove in production) */}
-        {process.env.NODE_ENV === 'development' && (
-          <Card className="border-yellow-200 bg-yellow-50">
-            <CardHeader>
-              <CardTitle className="text-sm text-yellow-800">Debug Info</CardTitle>
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">Total Spent</CardTitle>
+              <TrendingUp className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
-            <CardContent className="text-xs text-yellow-700">
-              <div>Total Projects: {allProjects.length}</div>
-              <div>Projects with Budget: {projectsWithBudget.length}</div>
-              <div>Projects without Budget: {projectsWithoutBudget.length}</div>
-              <div>Last Update: {new Date().toLocaleTimeString()}</div>
-              <div>Refreshing: {refreshing ? 'Yes' : 'No'}</div>
-              <div>Loading: {loading ? 'Yes' : 'No'}</div>
+            <CardContent>
+              <div className="text-2xl font-bold">
+                {formatCurrency(budgetStats.totalSpent)}
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Current spending
+              </p>
             </CardContent>
           </Card>
-        )}
 
-        {/* Budget Overview - Only show if there are projects with budgets */}
-        {projectsWithBudget.length > 0 && (
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Total Budget</CardTitle>
-                <DollarSign className="h-4 w-4 text-muted-foreground" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">
-                  {formatCurrency(budgetStats.totalBudget)}
-                </div>
-                <p className="text-xs text-muted-foreground">
-                  Across {budgetStats.projectCount} projects
-                </p>
-              </CardContent>
-            </Card>
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">Over Budget</CardTitle>
+              <AlertTriangle className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold text-red-600">
+                {budgetStats.overBudget}
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Projects over budget
+              </p>
+            </CardContent>
+          </Card>
 
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Total Spent</CardTitle>
-                <TrendingUp className="h-4 w-4 text-muted-foreground" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">
-                  {formatCurrency(budgetStats.totalSpent)}
-                </div>
-                <p className="text-xs text-muted-foreground">
-                  Current spending
-                </p>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Over Budget</CardTitle>
-                <AlertTriangle className="h-4 w-4 text-muted-foreground" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold text-red-600">
-                  {budgetStats.overBudget}
-                </div>
-                <p className="text-xs text-muted-foreground">
-                  Projects over budget
-                </p>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">At Risk</CardTitle>
-                <Target className="h-4 w-4 text-muted-foreground" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold text-yellow-600">
-                  {budgetStats.atRisk}
-                </div>
-                <p className="text-xs text-muted-foreground">
-                  Projects at 75%+ budget
-                </p>
-              </CardContent>
-            </Card>
-          </div>
-        )}
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">At Risk</CardTitle>
+              <Target className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold text-yellow-600">
+                {budgetStats.atRisk}
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Projects at 75%+ budget
+              </p>
+            </CardContent>
+          </Card>
+        </div>
 
         {/* Main Content Tabs */}
         <Tabs defaultValue="budgeted" className="space-y-4">
@@ -569,13 +397,13 @@ export default function AdminBudgetsPage() {
             </TabsTrigger>
           </TabsList>
 
-          {/* Projects with Budgets */}
+          {/* Projects with Budgets - Same table structure as project reports */}
           <TabsContent value="budgeted">
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   <DollarSign className="h-5 w-5" />
-                  Projects with Budget Tracking
+                  Projects with Budget Tracking ({projectsWithBudget.length})
                 </CardTitle>
                 <CardDescription>
                   Monitor quarterly budget allocation and spending across all projects
@@ -602,68 +430,108 @@ export default function AdminBudgetsPage() {
                     <TableHeader>
                       <TableRow>
                         <TableHead>Project</TableHead>
-                        <TableHead>Total Budget</TableHead>
-                        <TableHead>Total Spent</TableHead>
-                        <TableHead>Remaining</TableHead>
+                        <TableHead>Budget</TableHead>
+                        <TableHead>Spent</TableHead>
                         <TableHead>Utilization</TableHead>
-                        <TableHead>Status</TableHead>
+                        <TableHead>Hours</TableHead>
+                        <TableHead>Team</TableHead>
+                        <TableHead>Activity</TableHead>
                         <TableHead>Actions</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
                       {projectsWithBudget.map((project) => {
-                        const totalBudget = getTotalBudget(project)
-                        const totalSpent = getTotalSpent(project)
-                        const remaining = Math.max(0, totalBudget - totalSpent)
-                        const utilization = getBudgetUtilization(totalSpent, totalBudget)
-                        const status = getBudgetStatus(utilization)
+                        const budgetStatus = getBudgetStatus(project.budgetUtilization)
+                        const StatusIcon = budgetStatus.icon
 
                         return (
-                          <TableRow key={project.id}>
+                          <TableRow key={project.id} className="hover:bg-gray-50">
                             <TableCell>
-                              <div className="flex items-center gap-2">
+                              <div className="flex items-center gap-3">
                                 <div
-                                  className="w-3 h-3 rounded-full"
+                                  className="w-4 h-4 rounded-full"
                                   style={{ backgroundColor: project.color }}
                                 />
-                                <span className="font-medium">{project.name}</span>
+                                <div>
+                                  <div className="font-medium">{project.name}</div>
+                                  {project.description && (
+                                    <div className="text-sm text-gray-500 truncate max-w-xs">
+                                      {project.description}
+                                    </div>
+                                  )}
+                                </div>
+                                {!project.active && (
+                                  <Badge variant="secondary">Inactive</Badge>
+                                )}
                               </div>
                             </TableCell>
                             <TableCell>
-                              <span className="font-medium">{formatCurrency(totalBudget)}</span>
-                            </TableCell>
-                            <TableCell>
-                              <span className="font-medium">{formatCurrency(totalSpent)}</span>
-                            </TableCell>
-                            <TableCell>
-                              <span className={remaining > 0 ? 'text-green-600' : 'text-red-600'}>
-                                {formatCurrency(remaining)}
+                              <span className="font-medium">
+                                {formatCurrency(project.totalBudget)}
                               </span>
                             </TableCell>
                             <TableCell>
-                              <div className="space-y-2 min-w-[120px]">
-                                <div className="flex justify-between text-sm">
-                                  <span>{utilization.toFixed(1)}%</span>
+                              <span className="font-medium">
+                                {formatCurrency(project.totalSpent)}
+                              </span>
+                            </TableCell>
+                            <TableCell>
+                              <div className="space-y-2">
+                                <div className="flex items-center gap-2">
+                                  <StatusIcon className={`h-4 w-4 ${budgetStatus.color}`} />
+                                  <Badge variant={budgetStatus.variant}>
+                                    {budgetStatus.status}
+                                  </Badge>
                                 </div>
-                                <Progress 
-                                  value={Math.min(utilization, 100)} 
-                                  className="h-2"
-                                />
+                                <div className="w-full">
+                                  <div className="flex justify-between text-xs mb-1">
+                                    <span>{project.budgetUtilization.toFixed(1)}%</span>
+                                    <span>{formatCurrency(project.totalBudget - project.totalSpent)} left</span>
+                                  </div>
+                                  <Progress 
+                                    value={Math.min(project.budgetUtilization, 100)} 
+                                    className="h-2"
+                                  />
+                                </div>
                               </div>
                             </TableCell>
                             <TableCell>
-                              <Badge variant={status.variant}>
-                                {status.label}
-                              </Badge>
+                              <div className="flex items-center gap-1">
+                                <Clock className="h-4 w-4 text-gray-400" />
+                                <span className="font-medium">{formatHours(project.totalHours)}</span>
+                              </div>
+                              <div className="text-sm text-gray-500">
+                                {project.entryCount} entries
+                              </div>
                             </TableCell>
                             <TableCell>
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={() => handleEditBudget(project)}
-                              >
-                                <Edit className="h-4 w-4" />
-                              </Button>
+                              <div className="flex items-center gap-1">
+                                <Users className="h-4 w-4 text-gray-400" />
+                                <span>{project.employeeCount}</span>
+                              </div>
+                            </TableCell>
+                            <TableCell>
+                              <span className="text-sm text-gray-600">
+                                {getActivityStatus(project.lastActivity)}
+                              </span>
+                            </TableCell>
+                            <TableCell>
+                              <div className="flex gap-2">
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => handleEditBudget(project)}
+                                >
+                                  <Edit className="h-4 w-4 mr-1" />
+                                  Edit Budget
+                                </Button>
+                                <Link href={`/reports/projects/${project.id}`}>
+                                  <Button variant="outline" size="sm">
+                                    <BarChart3 className="h-4 w-4 mr-1" />
+                                    Report
+                                  </Button>
+                                </Link>
+                              </div>
                             </TableCell>
                           </TableRow>
                         )
@@ -681,7 +549,7 @@ export default function AdminBudgetsPage() {
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   <Plus className="h-5 w-5" />
-                  Setup Project Budgets
+                  Setup Project Budgets ({projectsWithoutBudget.length})
                 </CardTitle>
                 <CardDescription>
                   Configure quarterly budgets for projects that don't have budget tracking enabled
@@ -751,7 +619,7 @@ export default function AdminBudgetsPage() {
               <>
                 <DialogHeader>
                   <DialogTitle>
-                    {hasBudgetSet(editingProject) ? 'Edit' : 'Setup'} Project Budget
+                    {editingProject.totalBudget > 0 || (editingProject.q1Budget + editingProject.q2Budget + editingProject.q3Budget + editingProject.q4Budget) > 0 ? 'Edit' : 'Setup'} Project Budget
                   </DialogTitle>
                   <DialogDescription>
                     Configure quarterly budget allocation for {editingProject.name}
@@ -874,7 +742,7 @@ export default function AdminBudgetsPage() {
                   </Button>
                   <Button onClick={handleUpdateBudget} disabled={updating}>
                     {updating && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-                    {hasBudgetSet(editingProject) ? 'Update' : 'Setup'} Budget
+                    {editingProject.totalBudget > 0 || (editingProject.q1Budget + editingProject.q2Budget + editingProject.q3Budget + editingProject.q4Budget) > 0 ? 'Update' : 'Setup'} Budget
                   </Button>
                 </DialogFooter>
               </>
