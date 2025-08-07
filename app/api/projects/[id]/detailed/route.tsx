@@ -3,9 +3,10 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { NEXT_AUTH_CONFIG } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { EnhancedSpendingCalculator } from '@/lib/spending-calculator-enhanced'
 
 interface RouteParams {
-  params: Promise< {
+  params: Promise<{
     id: string
   }>
 }
@@ -34,6 +35,8 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     const { id: projectId } = await params
     const { searchParams } = new URL(request.url)
     const year = parseInt(searchParams.get('year') || new Date().getFullYear().toString())
+
+    console.log(`Generating detailed report for project ${projectId}, fiscal year ${year} with historical rates`)
 
     // Check permissions
     const hasPermission = session.user.role === 'ADMIN' || 
@@ -86,6 +89,8 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       }
     })
 
+    console.log(`Found ${timeEntries.length} time entries for fiscal year ${year}`)
+
     // Get all unique users who worked on this project
     const uniqueUsers = new Map<string, any>()
     timeEntries.forEach(entry => {
@@ -94,8 +99,8 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       }
     })
 
-    // Process data for each employee
-    const employees = Array.from(uniqueUsers.values()).map(user => {
+    // Process data for each employee using historical rates
+    const employees = await Promise.all(Array.from(uniqueUsers.values()).map(async (user) => {
       const userEntries = timeEntries.filter(entry => entry.user.id === user.id)
       
       // Initialize monthly data
@@ -106,14 +111,20 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       const quarterlyHours = { q1: 0, q2: 0, q3: 0, q4: 0 }
       const quarterlySpending = { q1: 0, q2: 0, q3: 0, q4: 0 }
 
-      // Process each time entry
-      userEntries.forEach(entry => {
+      // Process each time entry with historical rate calculation
+      for (const entry of userEntries) {
         const entryDate = new Date(entry.date)
         const monthKey = getMonthKey(entryDate)
         const quarter = getFiscalQuarter(entryDate)
         const hours = Number(entry.hours) || 0
-        const rate = Number(user.employeeRate) || 0
-        const cost = hours * rate
+        
+        // Get the historical rate for this specific entry date
+        const historicalRate = await EnhancedSpendingCalculator.getEffectiveRateForDate(
+          entry.user.id, 
+          entryDate
+        )
+        
+        const cost = hours * historicalRate
 
         // Monthly totals
         monthlyHours[monthKey] = (monthlyHours[monthKey] || 0) + hours
@@ -122,26 +133,45 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         // Quarterly totals
         quarterlyHours[`q${quarter}` as keyof typeof quarterlyHours] += hours
         quarterlySpending[`q${quarter}` as keyof typeof quarterlySpending] += cost
-      })
+      }
 
       const totalHours = Object.values(quarterlyHours).reduce((sum, h) => sum + h, 0)
       const totalSpending = Object.values(quarterlySpending).reduce((sum, s) => sum + s, 0)
+
+      // Get rate history for this user during the fiscal year
+      const rateHistory = await prisma.rateHistory.findMany({
+        where: {
+          userId: user.id,
+          effectiveDate: {
+            gte: fiscalYearStart,
+            lte: fiscalYearEnd
+          }
+        },
+        orderBy: {
+          effectiveDate: 'asc'
+        }
+      })
 
       return {
         id: user.id,
         name: user.name,
         email: user.email,
-        rate: Number(user.employeeRate),
+        rate: Number(user.employeeRate), // Current rate for reference
         monthlyHours,
         monthlySpending,
         quarterlyHours,
         quarterlySpending,
         totalHours,
-        totalSpending
+        totalSpending,
+        rateHistory: rateHistory.map(rh => ({
+          rate: Number(rh.rate),
+          effectiveDate: rh.effectiveDate.toISOString(),
+          createdAt: rh.createdAt.toISOString()
+        }))
       }
-    })
+    }))
 
-    // Calculate totals across all employees
+    // Calculate totals across all employees (these should match the recalculated project spending)
     const totals = {
       monthlyHours: {} as Record<string, number>,
       monthlySpending: {} as Record<string, number>,
@@ -173,7 +203,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       totals.totalSpending += employee.totalSpending
     })
 
-    // Update project spent amounts in database (real-time calculation)
+    // Update project spent amounts in database with the recalculated values
     await prisma.project.update({
       where: { id: projectId },
       data: {
@@ -182,6 +212,14 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         q3Spent: totals.quarterlySpending.q3,
         q4Spent: totals.quarterlySpending.q4
       }
+    })
+
+    console.log(`Updated project ${project.name} with recalculated spending:`, {
+      q1: totals.quarterlySpending.q1.toFixed(2),
+      q2: totals.quarterlySpending.q2.toFixed(2),
+      q3: totals.quarterlySpending.q3.toFixed(2),
+      q4: totals.quarterlySpending.q4.toFixed(2),
+      total: totals.totalSpending.toFixed(2)
     })
 
     // Generate all months for the fiscal year
@@ -217,12 +255,17 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       },
       employees: employees.sort((a, b) => b.totalHours - a.totalHours), // Sort by total hours desc
       totals,
-      months
+      months,
+      calculationMethod: 'historical_rates',
+      lastCalculated: new Date().toISOString()
     }
 
     return NextResponse.json(reportData)
   } catch (error) {
     console.error('Failed to fetch detailed project report:', error)
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+    return NextResponse.json({ 
+      error: 'Internal server error',
+      details: error instanceof Error ? error.message : 'Unknown error'
+    }, { status: 500 })
   }
 }

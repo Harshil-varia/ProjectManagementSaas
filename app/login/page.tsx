@@ -26,17 +26,34 @@ export default function LoginPage() {
       })
 
       if (result?.ok) {
-        router.push('/calendar')
+        // After successful login, fetch user role from server
+        const response = await fetch('/api/auth/session', {
+          cache: 'no-store'
+        })
+        
+        if (response.ok) {
+          const session = await response.json()
+          
+          // Redirect based on user role
+          if (session?.user?.role === 'ADMIN') {
+            router.push('/projects')
+          } else {
+            router.push('/calendar')
+          }
+        } else {
+          // Fallback to calendar if session fetch fails
+          router.push('/calendar')
+        }
       } else {
         alert('Invalid credentials')
       }
     } catch (error) {
       console.error('Login error:', error)
+      alert('An error occurred during login')
     } finally {
       setLoading(false)
     }
   }
-
   return (
     <div className="min-h-screen flex items-center justify-center">
       <Card className="w-[400px]">

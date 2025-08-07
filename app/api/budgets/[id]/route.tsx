@@ -6,6 +6,7 @@ import { prisma } from '@/lib/prisma'
 import { Prisma } from '@prisma/client'
 import { z } from 'zod'
 import { SpendingCalculator } from '@/lib/spending-calculator'
+import { EnhancedSpendingCalculator } from '@/lib/spending-calculator-enhanced'
 
 // ✅ FIXED: Safe monetary validation with string input
 const budgetUpdateSchema = z.object({
@@ -270,7 +271,7 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
 
     // Recalculate spending to ensure accuracy after budget update
     try {
-      await SpendingCalculator.updateProjectSpending(projectId)
+      await EnhancedSpendingCalculator.updateProjectSpendingWithHistory(projectId)
       console.log(`Spending recalculated for project ${existingProject.name} after budget update`)
     } catch (error) {
       console.warn('Failed to recalculate spending after budget update:', error)

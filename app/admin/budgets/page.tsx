@@ -1,5 +1,3 @@
-//app/admin/budgets/page.tsx
-
 'use client'
 
 import { useEffect, useState, useMemo } from 'react'

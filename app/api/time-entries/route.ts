@@ -5,6 +5,7 @@ import { NEXT_AUTH_CONFIG } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { SpendingCalculator } from '@/lib/spending-calculator'
 import { z } from 'zod'
+import { EnhancedSpendingCalculator } from '@/lib/spending-calculator-enhanced'
 
 const createTimeEntrySchema = z.object({
   projectId: z.string().min(1),
@@ -134,7 +135,7 @@ export async function POST(request: NextRequest) {
 
     // Automatically update project spending
     try {
-      await SpendingCalculator.updateProjectSpending(projectId)
+      await EnhancedSpendingCalculator.updateProjectSpendingWithHistory(projectId)
       console.log(`✅ Updated spending for project ${projectId} after new time entry`)
     } catch (spendingError) {
       console.error('Failed to update project spending:', spendingError)

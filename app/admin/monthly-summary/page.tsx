@@ -22,21 +22,33 @@ import {
   Clock,
   Search,
   Calendar,
-  FileText
+  FileText,
+  TrendingUp,
+  AlertTriangle
 } from 'lucide-react'
 import { format, startOfMonth, endOfMonth, subMonths, addMonths } from 'date-fns'
 import { toast } from 'sonner'
+
+interface RatePeriod {
+  rate: number
+  effectiveDate: string
+  endDate: string | null
+  hours: number
+  cost: number
+}
 
 interface EmployeeProjectSummary {
   employeeId: string
   employeeName: string | null
   employeeEmail: string
-  employeeRate: number
+  employeeRate: number // Current rate for reference
   projectId: string
   projectName: string
   projectCode: string | null
   aggregatedHours: number
   totalCost: number
+  ratePeriods: RatePeriod[] // New: breakdown by rate periods
+  hasRateChanges: boolean // New: flag to indicate rate changes in this period
 }
 
 interface MonthlySummaryData {
@@ -49,6 +61,7 @@ interface MonthlySummaryData {
     employeeCount: number
     projectCount: number
   }
+  rateChangesInPeriod: number // New: total rate changes in this period
 }
 
 export default function MonthlyEmployeeSummaryPage() {
@@ -61,6 +74,7 @@ export default function MonthlyEmployeeSummaryPage() {
   const [selectedDate, setSelectedDate] = useState(new Date())
   const [searchTerm, setSearchTerm] = useState('')
   const [selectedProject, setSelectedProject] = useState('all')
+  const [showRateDetails, setShowRateDetails] = useState(false)
   
   // Available projects for filtering
   const [projects, setProjects] = useState<Array<{id: string, name: string, color: string}>>([])
@@ -87,7 +101,8 @@ export default function MonthlyEmployeeSummaryPage() {
       const year = selectedDate.getFullYear()
       const month = selectedDate.getMonth() + 1
       
-      const response = await fetch(`/api/admin/monthly-summary?year=${year}&month=${month}`)
+      // Add parameter to get detailed rate information
+      const response = await fetch(`/api/admin/monthly-summary?year=${year}&month=${month}&includeRateDetails=true`)
       if (response.ok) {
         const data = await response.json()
         setSummaryData(data)
@@ -119,14 +134,15 @@ export default function MonthlyEmployeeSummaryPage() {
 
     setExporting(true)
     try {
-      const year = selectedDate. getFullYear()
+      const year = selectedDate.getFullYear()
       const month = selectedDate.getMonth() + 1
       
       const params = new URLSearchParams({
         format,
         year: year.toString(),
         month: month.toString(),
-        type: 'accounting'
+        type: 'accounting',
+        includeRateDetails: 'true'
       })
 
       const response = await fetch(`/api/admin/monthly-summary/export?${params}`, {
@@ -145,7 +161,7 @@ export default function MonthlyEmployeeSummaryPage() {
         const url = window.URL.createObjectURL(blob)
         const link = document.createElement('a')
         link.href = url
-        link.download = `Monthly_Employee_Summary_.${format === 'excel' ? 'xlsx' : 'csv'}`
+        link.download = `Monthly_Employee_Summary_${year}_${month.toString().padStart(2, '0')}.${format === 'excel' ? 'xlsx' : 'csv'}`
         
         // Append to body, click, and remove
         document.body.appendChild(link)
@@ -181,6 +197,10 @@ export default function MonthlyEmployeeSummaryPage() {
     return hours.toFixed(2)
   }
 
+  const formatDate = (dateString: string) => {
+    return format(new Date(dateString), 'MMM dd')
+  }
+
   // Filter summaries based on search and project filter
   const filteredSummaries = summaryData?.summaries.filter(summary => {
     const matchesSearch = summary.employeeName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -202,7 +222,8 @@ export default function MonthlyEmployeeSummaryPage() {
           id: summary.employeeId,
           name: summary.employeeName,
           email: summary.employeeEmail,
-          rate: summary.employeeRate
+          rate: summary.employeeRate,
+          hasRateChanges: false
         },
         projects: [],
         totalHours: 0,
@@ -215,8 +236,14 @@ export default function MonthlyEmployeeSummaryPage() {
       projectName: summary.projectName,
       projectCode: summary.projectCode,
       hours: summary.aggregatedHours,
-      cost: summary.totalCost
+      cost: summary.totalCost,
+      ratePeriods: summary.ratePeriods,
+      hasRateChanges: summary.hasRateChanges
     })
+    
+    if (summary.hasRateChanges) {
+      groups[key].employee.hasRateChanges = true
+    }
     
     groups[key].totalHours += summary.aggregatedHours
     groups[key].totalCost += summary.totalCost
@@ -255,8 +282,16 @@ export default function MonthlyEmployeeSummaryPage() {
           <div>
             <h1 className="text-3xl font-bold">Monthly Employee Summary</h1>
             <p className="text-gray-600">
-              Employee hours and costs by project for accounting purposes
+              Employee hours and costs by project with historical rate tracking
             </p>
+            {summaryData && summaryData.rateChangesInPeriod > 0 && (
+              <div className="flex items-center gap-2 mt-2">
+                <AlertTriangle className="h-4 w-4 text-orange-500" />
+                <span className="text-sm text-orange-600">
+                  {summaryData.rateChangesInPeriod} rate change{summaryData.rateChangesInPeriod !== 1 ? 's' : ''} occurred this month
+                </span>
+              </div>
+            )}
           </div>
           <Badge variant="destructive" className="flex items-center gap-2">
             <Shield className="h-4 w-4" />
@@ -336,6 +371,20 @@ export default function MonthlyEmployeeSummaryPage() {
                 </Select>
               </div>
 
+              {/* Rate Details Toggle */}
+              <div className="space-y-2">
+                <label className="text-sm font-medium">View</label>
+                <Button
+                  variant={showRateDetails ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => setShowRateDetails(!showRateDetails)}
+                  className="flex items-center gap-2"
+                >
+                  <TrendingUp className="h-4 w-4" />
+                  {showRateDetails ? 'Hide' : 'Show'} Rate Details
+                </Button>
+              </div>
+
               {/* Export Buttons */}
               <div className="flex gap-2">
                 <Button
@@ -394,7 +443,7 @@ export default function MonthlyEmployeeSummaryPage() {
                   {formatCurrency(summaryData.totals.totalCost)}
                 </div>
                 <p className="text-xs text-muted-foreground">
-                  Labor costs
+                  With historical rates
                 </p>
               </CardContent>
             </Card>
@@ -416,15 +465,15 @@ export default function MonthlyEmployeeSummaryPage() {
 
             <Card>
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Projects</CardTitle>
-                <FileText className="h-4 w-4 text-muted-foreground" />
+                <CardTitle className="text-sm font-medium">Rate Changes</CardTitle>
+                <TrendingUp className="h-4 w-4 text-muted-foreground" />
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold">
-                  {summaryData.totals.projectCount}
+                  {summaryData.rateChangesInPeriod || 0}
                 </div>
                 <p className="text-xs text-muted-foreground">
-                  With activity
+                  This month
                 </p>
               </CardContent>
             </Card>
@@ -439,7 +488,7 @@ export default function MonthlyEmployeeSummaryPage() {
               Employee Summary - {format(selectedDate, 'MMMM yyyy')}
             </CardTitle>
             <CardDescription>
-              Hours and costs by employee and project for accounting software import
+              Hours and costs by employee and project with historical rate breakdown
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -463,7 +512,9 @@ export default function MonthlyEmployeeSummaryPage() {
                     <TableHead>Project Code</TableHead>
                     <TableHead>Project Name</TableHead>
                     <TableHead className="text-right">Aggregated Hours</TableHead>
-                    <TableHead className="text-right">Hourly Rate</TableHead>
+                    <TableHead className="text-right">
+                      {showRateDetails ? 'Rate Details' : 'Hourly Rate'}
+                    </TableHead>
                     <TableHead className="text-right">Total Cost</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -474,8 +525,14 @@ export default function MonthlyEmployeeSummaryPage() {
                         <TableCell>
                           {index === 0 ? (
                             <div>
-                              <div className="font-medium">
+                              <div className="font-medium flex items-center gap-2">
                                 {employeeSummary.employee.name || 'N/A'}
+                                {employeeSummary.employee.hasRateChanges && (
+                                  <Badge variant="secondary" className="text-xs">
+                                    <TrendingUp className="h-3 w-3 mr-1" />
+                                    Rate Changes
+                                  </Badge>
+                                )}
                               </div>
                               <div className="text-sm text-muted-foreground">
                                 {employeeSummary.employee.email}
@@ -504,7 +561,32 @@ export default function MonthlyEmployeeSummaryPage() {
                           {formatHours(project.hours)}
                         </TableCell>
                         <TableCell className="text-right">
-                          {formatCurrency(employeeSummary.employee.rate)}
+                          {showRateDetails && project.hasRateChanges && project.ratePeriods.length > 1 ? (
+                            <div className="space-y-1">
+                              {project.ratePeriods.map((period: RatePeriod, periodIndex: number) => (
+                                <div key={periodIndex} className="text-xs">
+                                  <div className="font-medium">
+                                    {formatCurrency(period.rate)}/hr
+                                  </div>
+                                  <div className="text-muted-foreground">
+                                    {formatDate(period.effectiveDate)} - {period.endDate ? formatDate(period.endDate) : 'Present'}
+                                  </div>
+                                  <div className="text-muted-foreground">
+                                    {formatHours(period.hours)}h → {formatCurrency(period.cost)}
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          ) : (
+                            <div>
+                              <div>{formatCurrency(employeeSummary.employee.rate)}</div>
+                              {project.hasRateChanges && (
+                                <div className="text-xs text-orange-600">
+                                  Multiple rates
+                                </div>
+                              )}
+                            </div>
+                          )}
                         </TableCell>
                         <TableCell className="text-right font-medium">
                           {formatCurrency(project.cost)}
