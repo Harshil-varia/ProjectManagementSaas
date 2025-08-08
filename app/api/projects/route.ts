@@ -4,6 +4,7 @@ import { getServerSession } from 'next-auth'
 import { NEXT_AUTH_CONFIG } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { Prisma } from '@prisma/client'
+import { Decimal } from '@prisma/client/runtime/library'
 
 // Helper function for error handling
 const getErrorMessage = (error: unknown): string => {
@@ -12,7 +13,7 @@ const getErrorMessage = (error: unknown): string => {
 }
 
 // ✅ FIXED: Safe helper function to convert Decimal to number for JSON serialization
-const safeDecimalToNumber = (decimal: Prisma.Decimal | number | null | undefined): number => {
+const safeDecimalToNumber = (decimal: Decimal | number | null | undefined): number => {
   if (typeof decimal === 'number') {
     return isFinite(decimal) ? decimal : 0
   }

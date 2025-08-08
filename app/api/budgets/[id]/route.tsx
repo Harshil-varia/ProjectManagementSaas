@@ -84,7 +84,7 @@ interface RouteParams {
 }
 
 // ✅ FIXED: Safe helper function to convert Decimal to number for JSON serialization
-const safeDecimalToNumber = (decimal: Prisma.Decimal): number => {
+const safeDecimalToNumber = (decimal: Decimal): number => {
   if (!decimal) return 0
   
   try {

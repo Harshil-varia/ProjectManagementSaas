@@ -1,9 +1,10 @@
 // lib/spending-calculator-enhanced.ts
 import { prisma } from '@/lib/prisma'
 import { Prisma } from '@prisma/client'
+import { Decimal } from '@prisma/client/runtime/library'
 
 // Safe decimal conversion helper
-function safeDecimalToNumber(decimal: Prisma.Decimal | number | null | undefined): number {
+function safeDecimalToNumber(decimal: Decimal | number | null | undefined): number {
   if (typeof decimal === 'number') {
     return isFinite(decimal) ? decimal : 0
   }
@@ -177,7 +178,7 @@ export class EnhancedSpendingCalculator {
     timeEntry: {
       id: string
       userId: string
-      hours: number | Prisma.Decimal
+      hours: number | Decimal
       date: Date
     }
   ): Promise<{
@@ -227,10 +228,10 @@ export class EnhancedSpendingCalculator {
         }
       })
 
-      let q1Spent = new Prisma.Decimal(0)
-      let q2Spent = new Prisma.Decimal(0)
-      let q3Spent = new Prisma.Decimal(0)
-      let q4Spent = new Prisma.Decimal(0)
+      let q1Spent = new Decimal(0)
+      let q2Spent = new Decimal(0)
+      let q3Spent = new Decimal(0)
+      let q4Spent = new Decimal(0)
 
       // Process each entry with historical rate
       for (const entry of timeEntries) {
@@ -242,7 +243,7 @@ export class EnhancedSpendingCalculator {
             date: new Date(entry.date)
           })
 
-          const costDecimal = new Prisma.Decimal(cost)
+          const costDecimal = new Decimal(cost)
 
           switch (quarter) {
             case 1: q1Spent = q1Spent.add(costDecimal); break
@@ -310,7 +311,7 @@ export class EnhancedSpendingCalculator {
         await tx.rateHistory.create({
           data: {
             userId,
-            rate: new Prisma.Decimal(newRate),
+            rate: new Decimal(newRate),
             effectiveDate,
             createdBy: adminUserId
           }
@@ -321,7 +322,7 @@ export class EnhancedSpendingCalculator {
         if (effectiveDate <= now) {
           await tx.user.update({
             where: { id: userId },
-            data: { employeeRate: new Prisma.Decimal(newRate) }
+            data: { employeeRate: new Decimal(newRate) }
           })
         }
 

@@ -1,9 +1,10 @@
 // lib/spending-calculator.ts
 import { prisma } from '@/lib/prisma'
 import { Prisma } from '@prisma/client'
+import { Decimal } from '@prisma/client/runtime/library'
 
 // ✅ FIXED: Safe decimal conversion helper
-function safeDecimalToNumber(decimal: Prisma.Decimal | number | null | undefined): number {
+function safeDecimalToNumber(decimal: Decimal | number | null | undefined): number {
   if (typeof decimal === 'number') {
     return isFinite(decimal) ? decimal : 0
   }
@@ -70,10 +71,10 @@ export class SpendingCalculator {
       })
 
       // ✅ FIXED: Initialize quarterly spending as Prisma Decimals
-      let q1Spent = new Prisma.Decimal(0)
-      let q2Spent = new Prisma.Decimal(0)
-      let q3Spent = new Prisma.Decimal(0)
-      let q4Spent = new Prisma.Decimal(0)
+      let q1Spent = new Decimal(0)
+      let q2Spent = new Decimal(0)
+      let q3Spent = new Decimal(0)
+      let q4Spent = new Decimal(0)
 
       // Calculate spending for each entry
       timeEntries.forEach(entry => {
@@ -96,7 +97,7 @@ export class SpendingCalculator {
             return
           }
 
-          const cost = new Prisma.Decimal(hours).mul(new Prisma.Decimal(rate))
+          const cost = new Decimal(hours).mul(new Decimal(rate))
 
           switch (quarter) {
             case 1: q1Spent = q1Spent.add(cost); break

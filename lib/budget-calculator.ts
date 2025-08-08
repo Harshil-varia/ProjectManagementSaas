@@ -1,5 +1,6 @@
 // lib/budget-calculator.ts
 import { Prisma } from '@prisma/client'
+import { Decimal } from '@prisma/client/runtime/library'
 
 interface TimeEntry {
   hours: number
@@ -18,7 +19,7 @@ interface QuarterlyBudget {
 
 export class BudgetCalculator {
   // ✅ FIXED: Safe decimal to number conversion
-  private static safeDecimalToNumber(decimal: Prisma.Decimal | number | null | undefined): number {
+  private static safeDecimalToNumber(decimal: Decimal | number | null | undefined): number {
     if (typeof decimal === 'number') {
       return isFinite(decimal) ? decimal : 0
     }
@@ -203,7 +204,7 @@ export class BudgetCalculator {
   }
 
   // ✅ FIXED: Safe currency formatting
-  public static formatCurrency(amount: number | Prisma.Decimal, showOverage: boolean = false): string {
+  public static formatCurrency(amount: number | Decimal, showOverage: boolean = false): string {
     let numericAmount: number
     
     try {
@@ -378,13 +379,13 @@ export class BudgetCalculator {
   }
 
   // ✅ NEW: Safe Prisma Decimal utilities
-  public static createDecimalFromInput(input: string | number): Prisma.Decimal {
+  public static createDecimalFromInput(input: string | number): Decimal {
     // Always use string input to avoid precision loss
     const stringInput = typeof input === 'number' ? input.toString() : input
-    return new Prisma.Decimal(stringInput)
+    return new Decimal(stringInput)
   }
 
-  public static formatDecimalForDisplay(decimal: Prisma.Decimal): string {
+  public static formatDecimalForDisplay(decimal: Decimal): string {
     try {
       const safeNumber = this.safeDecimalToNumber(decimal)
       return new Intl.NumberFormat('en-US', {

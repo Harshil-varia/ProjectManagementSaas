@@ -6,9 +6,10 @@ import { prisma } from '@/lib/prisma'
 import { startOfDay, endOfDay, format, eachMonthOfInterval } from 'date-fns'
 import { Prisma } from '@prisma/client'
 import * as XLSX from 'xlsx'
+import { Decimal } from '@prisma/client/runtime/library'
 
 // Helper function to safely work with Decimal values
-const safeDecimalToNumber = (decimal: Prisma.Decimal | number | null | undefined): number => {
+const safeDecimalToNumber = (decimal: Decimal | number | null | undefined): number => {
   if (typeof decimal === 'number') {
     return isFinite(decimal) ? decimal : 0
   }
@@ -25,7 +26,7 @@ const safeDecimalToNumber = (decimal: Prisma.Decimal | number | null | undefined
 }
 
 // Helper function to check if rate is greater than zero
-const hasValidRate = (rate: Prisma.Decimal): boolean => {
+const hasValidRate = (rate: Decimal): boolean => {
   try {
     return rate.gt(0)
   } catch (error) {

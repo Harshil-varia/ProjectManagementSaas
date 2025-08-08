@@ -7,6 +7,8 @@ import { EnhancedSpendingCalculator } from '@/lib/spending-calculator-enhanced'
 import { startOfDay, endOfDay, format } from 'date-fns'
 import * as XLSX from 'xlsx'
 import { Prisma } from '@prisma/client'
+import { Decimal } from '@prisma/client/runtime/library'
+
 
 
 
@@ -24,7 +26,7 @@ export async function GET(request: NextRequest) {
     const currentYear = new Date().getFullYear()
     const startDate = startOfDay(new Date(currentYear, 0, 1)) // January 1st
     const endDate = endOfDay(new Date(currentYear, 11, 31))   // December 31st
-    const safeDecimalToNumber = (decimal: Prisma.Decimal | number | null | undefined): number => {
+    const safeDecimalToNumber = (decimal: Decimal | number | null | undefined): number => {
       if (typeof decimal === 'number') {
         return isFinite(decimal) ? decimal : 0
       }
@@ -47,7 +49,7 @@ export async function GET(request: NextRequest) {
     });
     const adminNamesMap = new Map(adminUsers.map(admin => [admin.id, admin.name || 'Unknown Admin']));
 
-    const hasValidRate = (rate: Prisma.Decimal): boolean => {
+    const hasValidRate = (rate: Decimal): boolean => {
       try {
         return rate.gt(0)
       } catch (error) {
