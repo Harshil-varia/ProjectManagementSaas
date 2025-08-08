@@ -4,76 +4,77 @@ import { getServerSession } from 'next-auth'
 import { NEXT_AUTH_CONFIG } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { Prisma } from '@prisma/client'
+import { Decimal } from '@prisma/client/runtime/library'
 import { z } from 'zod'
 import { SpendingCalculator } from '@/lib/spending-calculator'
 import { EnhancedSpendingCalculator } from '@/lib/spending-calculator-enhanced'
-
 
 const getErrorMessage = (error: unknown): string => {
   if (error instanceof Error) return error.message
   return String(error)
 }
-// ✅ FIXED: Safe monetary validation with string input
+
+// ✅ FIXED: Safe monetary validation with string input using proper Decimal import
 const budgetUpdateSchema = z.object({
   totalBudget: z
     .union([z.string(), z.number()])
     .refine((val) => {
       try {
-        const decimal = new Prisma.Decimal(val)
+        const decimal = new Decimal(val)
         return decimal.gte('0') && decimal.lt('10000000') // Max $10M
       } catch {
         return false
       }
     }, 'Invalid total budget amount')
-    .transform((val) => new Prisma.Decimal(val)),
+    .transform((val) => new Decimal(val)),
   
   q1Budget: z
     .union([z.string(), z.number()])
     .refine((val) => {
       try {
-        const decimal = new Prisma.Decimal(val)
+        const decimal = new Decimal(val)
         return decimal.gte('0') && decimal.lt('10000000')
       } catch {
         return false
       }
     }, 'Invalid Q1 budget amount')
-    .transform((val) => new Prisma.Decimal(val)),
+    .transform((val) => new Decimal(val)),
   
   q2Budget: z
     .union([z.string(), z.number()])
     .refine((val) => {
       try {
-        const decimal = new Prisma.Decimal(val)
+        const decimal = new Decimal(val)
         return decimal.gte('0') && decimal.lt('10000000')
       } catch {
         return false
       }
     }, 'Invalid Q2 budget amount')
-    .transform((val) => new Prisma.Decimal(val)),
+    .transform((val) => new Decimal(val)),
   
   q3Budget: z
     .union([z.string(), z.number()])
     .refine((val) => {
       try {
-        const decimal = new Prisma.Decimal(val)
+        const decimal = new Decimal(val)
         return decimal.gte('0') && decimal.lt('10000000')
       } catch {
         return false
       }
     }, 'Invalid Q3 budget amount')
-    .transform((val) => new Prisma.Decimal(val)),
+    .transform((val) => new Decimal(val)),
   
   q4Budget: z
     .union([z.string(), z.number()])
     .refine((val) => {
       try {
-        const decimal = new Prisma.Decimal(val)
+        const decimal = new Decimal(val)
         return decimal.gte('0') && decimal.lt('10000000')
       } catch {
         return false
       }
     }, 'Invalid Q4 budget amount')
-    .transform((val) => new Prisma.Decimal(val))
+    .transform((val) => new Decimal(val))
 })
 
 interface RouteParams {
@@ -109,7 +110,6 @@ const safeDecimalToNumber = (decimal: Prisma.Decimal): number => {
     return parseFloat(decimal.toFixed(2))
   }
 }
-
 
 export async function GET(request: NextRequest, { params }: RouteParams) {
   try {
