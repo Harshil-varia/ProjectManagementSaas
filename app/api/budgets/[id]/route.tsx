@@ -3,10 +3,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { NEXT_AUTH_CONFIG } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
-import { Prisma } from '@prisma/client'
 import { Decimal } from '@prisma/client/runtime/library'
 import { z } from 'zod'
-import { SpendingCalculator } from '@/lib/spending-calculator'
 import { EnhancedSpendingCalculator } from '@/lib/spending-calculator-enhanced'
 
 const getErrorMessage = (error: unknown): string => {
