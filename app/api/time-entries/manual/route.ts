@@ -5,7 +5,10 @@ import { prisma } from '@/lib/prisma'
 
 export async function POST(request: NextRequest) {
   const session = await getServerSession(NEXT_AUTH_CONFIG)
-  
+  const getErrorMessage = (error: unknown): string => {
+  if (error instanceof Error) return error.message
+  return String(error)
+}
   if (!session) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
@@ -49,7 +52,7 @@ export async function POST(request: NextRequest) {
     console.error('Error creating manual time entry:', error)
     return NextResponse.json({ 
       error: 'Internal server error',
-      details: process.env.NODE_ENV === 'development' ? error.message : undefined
+      details: process.env.NODE_ENV === 'development' ? getErrorMessage(error) : undefined
     }, { status: 500 })
   }
 }

@@ -6,6 +6,9 @@ import { prisma } from '@/lib/prisma'
 import { EnhancedSpendingCalculator } from '@/lib/spending-calculator-enhanced'
 import { startOfDay, endOfDay, format } from 'date-fns'
 import * as XLSX from 'xlsx'
+import { Prisma } from '@prisma/client'
+
+
 
 export async function GET(request: NextRequest) {
   try {
@@ -21,6 +24,21 @@ export async function GET(request: NextRequest) {
     const currentYear = new Date().getFullYear()
     const startDate = startOfDay(new Date(currentYear, 0, 1)) // January 1st
     const endDate = endOfDay(new Date(currentYear, 11, 31))   // December 31st
+    const safeDecimalToNumber = (decimal: Prisma.Decimal | number | null | undefined): number => {
+      if (typeof decimal === 'number') {
+        return isFinite(decimal) ? decimal : 0
+      }
+      
+      if (!decimal) return 0
+      
+      try {
+        const number = decimal.toNumber()
+        return Number.isFinite(number) ? number : 0
+      } catch (error) {
+        console.error('Decimal conversion error:', error)
+        return 0
+      }
+    }
 
     // Get all admin users for name mapping
     const adminUsers = await prisma.user.findMany({
@@ -29,6 +47,13 @@ export async function GET(request: NextRequest) {
     });
     const adminNamesMap = new Map(adminUsers.map(admin => [admin.id, admin.name || 'Unknown Admin']));
 
+    const hasValidRate = (rate: Prisma.Decimal): boolean => {
+      try {
+        return rate.gt(0)
+      } catch (error) {
+        return false
+      }
+    }
     // Get all active users with their rate history
     const users = await prisma.user.findMany({
       where: { active: true },
@@ -176,10 +201,10 @@ export async function GET(request: NextRequest) {
         userData.user.name || userData.user.email,
         userData.user.email,
         userData.user.role,
-        userData.user.employeeRate > 0 ? `$${parseFloat(userData.user.employeeRate.toString()).toFixed(2)}` : 'N/A',
+        hasValidRate(userData.user.employeeRate) ? `$${safeDecimalToNumber(userData.user.employeeRate).toFixed(2)}` : 'N/A',
         userData.totalHours.toFixed(1),
         userData.projects.length,
-        userData.user.employeeRate > 0 ? `$${userData.totalHistoricalSpending.toFixed(2)}` : 'N/A'
+        hasValidRate(userData.user.employeeRate) ? `$${userData.totalHistoricalSpending.toFixed(2)}` : 'N/A'
       ])
     ]
 
@@ -213,13 +238,13 @@ export async function GET(request: NextRequest) {
       // Historical spending rows
       const historicalSpendingRows = userData.projects.length > 0
         ? userData.projects.map(project => [
-            userData.user.employeeRate > 0 ? `$${project.totalHistoricalSpending.toFixed(0)}` : '#N/A',
+             hasValidRate(userData.user.employeeRate) ? `$${project.totalHistoricalSpending.toFixed(0)}` : '#N/A',
             project.name,
             ...months.map(month => {
               const spending = project.monthlyHistoricalSpending[month]
-              return spending ? `$${spending.toFixed(0)}` : (userData.user.employeeRate > 0 ? '-' : '#N/A')
+              return spending ? `$${spending.toFixed(0)}` : (hasValidRate(userData.user.employeeRate) ? '-' : '#N/A')
             }),
-            userData.user.employeeRate > 0 ? `$${project.totalHistoricalSpending.toFixed(0)}` : '#N/A'
+            hasValidRate(userData.user.employeeRate) ? `$${project.totalHistoricalSpending.toFixed(0)}` : '#N/A'
           ])
         : [['#N/A', 'No Projects', ...months.map(() => '#N/A'), '#N/A']]
 
@@ -257,13 +282,13 @@ export async function GET(request: NextRequest) {
         ['COST (HISTORICAL RATES)', 'PROJECT', ...months.map(getMonthName), 'TOTAL'],
         ...historicalSpendingRows,
         [
-          userData.user.employeeRate > 0 ? `$${userData.totalHistoricalSpending.toFixed(0)}` : '#N/A',
+          hasValidRate(userData.user.employeeRate) ? `$${userData.totalHistoricalSpending.toFixed(0)}` : '#N/A',
           'TOTAL COST',
           ...months.map(month => {
             const total = userData.monthlyTotals.get(month)
-            return total && userData.user.employeeRate > 0 && total.historicalSpending > 0 ? `$${total.historicalSpending.toFixed(0)}` : '#N/A'
+            return total && hasValidRate(userData.user.employeeRate) && total.historicalSpending > 0 ? `$${total.historicalSpending.toFixed(0)}` : '#N/A'
           }),
-          userData.user.employeeRate > 0 ? `$${userData.totalHistoricalSpending.toFixed(0)}` : '#N/A'
+         hasValidRate(userData.user.employeeRate) ? `$${userData.totalHistoricalSpending.toFixed(0)}` : '#N/A'
         ],
         
         [''], // Separator

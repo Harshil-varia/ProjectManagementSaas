@@ -173,13 +173,13 @@ export default function AdminBudgetsPage() {
   useEffect(() => {
     if (status === 'unauthenticated') {
       router.push('/login')
-    } else if (session && session.user.role !== 'ADMIN') {
+    } else if (session && session.user?.role !== 'ADMIN') {
       router.push('/calendar')
     }
   }, [session, status, router])
 
   useEffect(() => {
-    if (session && session.user.role === 'ADMIN') {
+    if (session && session.user?.role === 'ADMIN') {
       fetchProjectSummaries()
     }
   }, [session])
@@ -290,7 +290,7 @@ export default function AdminBudgetsPage() {
     )
   }
 
-  if (!session || session.user.role !== 'ADMIN') {
+  if (!session || session?.user?.role !== 'ADMIN') {
     return (
       <DashboardLayout>
         <div className="text-center py-12">
@@ -419,7 +419,7 @@ export default function AdminBudgetsPage() {
                     <p className="text-gray-600 mb-4">
                       No projects have budgets configured yet. Start by setting up budgets for your projects.
                     </p>
-                    <Button onClick={() => document.querySelector('[value="unbudgeted"]')?.click()}>
+                    <Button onClick={() => (document.querySelector('[value="unbudgeted"]') as HTMLElement)?.click()}>
                       Setup First Budget
                     </Button>
                   </div>

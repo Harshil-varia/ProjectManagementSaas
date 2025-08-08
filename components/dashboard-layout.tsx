@@ -8,8 +8,7 @@ import { useState, useEffect } from 'react'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { 
-  LayoutDashboard, 
+import {  
   Calendar, 
   BarChart3, 
   FolderOpen, 
@@ -170,6 +169,8 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
       setExpandedItems(new Set([currentItem.name]))
     }
   }, [pathname, projectPermissions])
+
+  
 
   const getNavigationWithPermissions = (): NavigationItem[] => {
     const baseNavigation = getBaseNavigation()

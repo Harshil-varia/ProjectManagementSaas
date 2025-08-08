@@ -4,11 +4,38 @@ import { getServerSession } from 'next-auth'
 import { NEXT_AUTH_CONFIG } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { startOfDay, endOfDay, format, eachMonthOfInterval } from 'date-fns'
+import { Prisma } from '@prisma/client'
 import * as XLSX from 'xlsx'
+
+// Helper function to safely work with Decimal values
+const safeDecimalToNumber = (decimal: Prisma.Decimal | number | null | undefined): number => {
+  if (typeof decimal === 'number') {
+    return isFinite(decimal) ? decimal : 0
+  }
+  
+  if (!decimal) return 0
+  
+  try {
+    const number = decimal.toNumber()
+    return Number.isFinite(number) ? number : 0
+  } catch (error) {
+    console.error('Decimal conversion error:', error)
+    return 0
+  }
+}
+
+// Helper function to check if rate is greater than zero
+const hasValidRate = (rate: Prisma.Decimal): boolean => {
+  try {
+    return rate.gt(0)
+  } catch (error) {
+    return false
+  }
+}
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }>}
 ) {
   try {
     const session = await getServerSession(NEXT_AUTH_CONFIG)
@@ -18,11 +45,11 @@ export async function GET(
     }
 
     // Only admins can export user summary reports
-    if (session.user.role !== 'ADMIN') {
+    if (session.user?.role !== 'ADMIN') {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
 
-    const userId = (await params).id
+    const { id: userId } = await params
     const { searchParams } = new URL(request.url)
     
     const startDateParam = searchParams.get('startDate')
@@ -93,11 +120,13 @@ export async function GET(
     let totalHours = 0
     let totalSpending = 0
 
+    // Convert employeeRate to number once for calculations
+    const userRate = safeDecimalToNumber(user.employeeRate)
+
     timeEntries.forEach(entry => {
       const monthKey = format(entry.date, 'yyyy-MM')
-      const hours = parseFloat(entry.hours.toString())
-      const rate = parseFloat(user.employeeRate.toString())
-      const spending = hours * rate
+      const hours = safeDecimalToNumber(entry.hours)
+      const spending = hours * userRate
 
       if (!projectsMap.has(entry.project.id)) {
         projectsMap.set(entry.project.id, {
@@ -167,29 +196,29 @@ export async function GET(
     const hoursSheet = XLSX.utils.aoa_to_sheet(hoursData)
     XLSX.utils.book_append_sheet(workbook, hoursSheet, 'Hours')
 
-    // Dollars Sheet
+    // Dollars Sheet - Fixed with proper Decimal handling
     const dollarsData = [
       // Header row
       ['DOLLARS', 'PROJECT', ...months.map(getMonthName), 'TOTAL'],
-      // Project rows
+      // Project rows - Fixed comparison
       ...projects.map(project => [
-        user.employeeRate > 0 ? `$${project.totalSpending.toFixed(0)}` : '#N/A',
+        hasValidRate(user.employeeRate) ? `$${project.totalSpending.toFixed(0)}` : '#N/A',
         project.name,
         ...months.map(month => {
           const spending = project.monthlySpending[month]
-          return spending ? `$${spending.toFixed(0)}` : (user.employeeRate > 0 ? '-' : '#N/A')
+          return spending ? `$${spending.toFixed(0)}` : (hasValidRate(user.employeeRate) ? '-' : '#N/A')
         }),
-        user.employeeRate > 0 ? `$${project.totalSpending.toFixed(0)}` : '#N/A'
+        hasValidRate(user.employeeRate) ? `$${project.totalSpending.toFixed(0)}` : '#N/A'
       ]),
-      // Total row
+      // Total row - Fixed comparison
       [
-        user.employeeRate > 0 ? `$${totalSpending.toFixed(0)}` : '#N/A',
+        hasValidRate(user.employeeRate) ? `$${totalSpending.toFixed(0)}` : '#N/A',
         'TOTAL SALARY',
         ...months.map(month => {
           const total = totalsMap.get(month)
-          return total && user.employeeRate > 0 ? `$${total.spending.toFixed(0)}` : '#N/A'
+          return total && hasValidRate(user.employeeRate) ? `$${total.spending.toFixed(0)}` : '#N/A'
         }),
-        user.employeeRate > 0 ? `$${totalSpending.toFixed(0)}` : '#N/A'
+        hasValidRate(user.employeeRate) ? `$${totalSpending.toFixed(0)}` : '#N/A'
       ]
     ]
 

@@ -37,14 +37,14 @@ async function checkAdminAuth() {
 
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const authCheck = await checkAdminAuth()
     if (authCheck.error) return authCheck.error
     const session = authCheck.session!
 
-    const entryId = params.id
+    const { id: entryId } = await params
 
     if (!entryId) {
       return NextResponse.json({ error: 'Entry ID required' }, { status: 400 })
@@ -177,7 +177,7 @@ export async function PUT(
     })
 
     // Update spending for affected projects
-    const projectsToUpdate = new Set()
+    const projectsToUpdate = new Set<string>()
     if (existingEntry.projectId) projectsToUpdate.add(existingEntry.projectId)
     if (projectId && projectId !== existingEntry.projectId) projectsToUpdate.add(projectId)
 
@@ -199,14 +199,14 @@ export async function PUT(
 
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const authCheck = await checkAdminAuth()
     if (authCheck.error) return authCheck.error
     const session = authCheck.session!
 
-    const entryId = params.id
+    const { id: entryId } = await params
 
     if (!entryId) {
       return NextResponse.json({ error: 'Entry ID required' }, { status: 400 })

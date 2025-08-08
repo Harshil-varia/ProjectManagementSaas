@@ -5,6 +5,12 @@ import { NEXT_AUTH_CONFIG } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { Prisma } from '@prisma/client'
 
+// Helper function for error handling
+const getErrorMessage = (error: unknown): string => {
+  if (error instanceof Error) return error.message
+  return String(error)
+}
+
 // ✅ FIXED: Safe helper function to convert Decimal to number for JSON serialization
 const safeDecimalToNumber = (decimal: Prisma.Decimal | number | null | undefined): number => {
   if (typeof decimal === 'number') {
@@ -50,31 +56,28 @@ export async function GET(request: NextRequest) {
 
     console.log('Fetching projects with options:', { includeBudget, detailed, debug })
 
-    // ✅ FIXED: Enhanced query based on the detailed report pattern
-    const projects = await prisma.project.findMany({
-      where: { 
-        active: true 
-      },
-      select: {
-        id: true,
-        name: true,
-        color: true,
-        active: true,
-        // ✅ ALWAYS include budget fields when requested
-        totalBudget: true,
-        q1Budget: true,
-        q2Budget: true,
-        q3Budget: true,
-        q4Budget: true,
-        q1Spent: true,
-        q2Spent: true,
-        q3Spent: true,
-        q4Spent: true,
-        createdAt: true,
-        updatedAt: true,
-        // ✅ Include additional data for detailed requests
-        ...(detailed && {
+    // ✅ SOLUTION 1: Use separate queries to avoid type conflicts
+    if (detailed) {
+      // Detailed query with all relations
+      const detailedProjects = await prisma.project.findMany({
+        where: { active: true },
+        select: {
+          id: true,
+          name: true,
+          color: true,
+          active: true,
           description: true,
+          totalBudget: true,
+          q1Budget: true,
+          q2Budget: true,
+          q3Budget: true,
+          q4Budget: true,
+          q1Spent: true,
+          q2Spent: true,
+          q3Spent: true,
+          q4Spent: true,
+          createdAt: true,
+          updatedAt: true,
           projectUsers: {
             include: {
               user: {
@@ -100,98 +103,155 @@ export async function GET(request: NextRequest) {
             },
             orderBy: {
               date: 'desc'
-            },
-            take: detailed ? undefined : 0 // Include all time entries if detailed
+            }
           }
-        }),
-        // Include related data for admin users
-        ...(session.user.role === 'ADMIN' && !detailed && {
+        },
+        orderBy: [{ name: 'asc' }]
+      })
+
+      const formattedProjects = detailedProjects.map(project => ({
+        id: project.id,
+        name: project.name,
+        color: project.color,
+        active: project.active,
+        description: project.description,
+        totalBudget: safeDecimalToNumber(project.totalBudget),
+        q1Budget: safeDecimalToNumber(project.q1Budget),
+        q2Budget: safeDecimalToNumber(project.q2Budget),
+        q3Budget: safeDecimalToNumber(project.q3Budget),
+        q4Budget: safeDecimalToNumber(project.q4Budget),
+        q1Spent: safeDecimalToNumber(project.q1Spent),
+        q2Spent: safeDecimalToNumber(project.q2Spent),
+        q3Spent: safeDecimalToNumber(project.q3Spent),
+        q4Spent: safeDecimalToNumber(project.q4Spent),
+        createdAt: project.createdAt,
+        updatedAt: project.updatedAt,
+        projectUsers: project.projectUsers.map(pu => ({
+          userId: pu.user.id,
+          name: pu.user.name,
+          email: pu.user.email,
+          rate: safeDecimalToNumber(pu.user.employeeRate)
+        })),
+        timeEntries: project.timeEntries.map(te => ({
+          id: te.id,
+          date: te.date,
+          hours: safeDecimalToNumber(te.hours),
+          description: te.description,
+          user: {
+            id: te.user.id,
+            name: te.user.name,
+            email: te.user.email,
+            rate: safeDecimalToNumber(te.user.employeeRate)
+          }
+        }))
+      }))
+
+      return NextResponse.json(formattedProjects)
+    }
+
+    // ✅ SOLUTION 2: Admin query with project users
+    if (session.user?.role === 'ADMIN') {
+      const adminProjects = await prisma.project.findMany({
+        where: { active: true },
+        select: {
+          id: true,
+          name: true,
+          color: true,
+          active: true,
+          totalBudget: true,
+          q1Budget: true,
+          q2Budget: true,
+          q3Budget: true,
+          q4Budget: true,
+          q1Spent: true,
+          q2Spent: true,
+          q3Spent: true,
+          q4Spent: true,
+          createdAt: true,
+          updatedAt: true,
           projectUsers: {
-            select: {
-              userId: true,
+            include: {
               user: {
                 select: {
                   id: true,
                   name: true,
-                  email: true
+                  email: true,
+                  employeeRate: true
                 }
               }
             }
           }
-        })
+        },
+        orderBy: [{ name: 'asc' }]
+      })
+
+      const formattedProjects = adminProjects.map(project => ({
+        id: project.id,
+        name: project.name,
+        color: project.color,
+        active: project.active,
+        totalBudget: safeDecimalToNumber(project.totalBudget),
+        q1Budget: safeDecimalToNumber(project.q1Budget),
+        q2Budget: safeDecimalToNumber(project.q2Budget),
+        q3Budget: safeDecimalToNumber(project.q3Budget),
+        q4Budget: safeDecimalToNumber(project.q4Budget),
+        q1Spent: safeDecimalToNumber(project.q1Spent),
+        q2Spent: safeDecimalToNumber(project.q2Spent),
+        q3Spent: safeDecimalToNumber(project.q3Spent),
+        q4Spent: safeDecimalToNumber(project.q4Spent),
+        createdAt: project.createdAt,
+        updatedAt: project.updatedAt,
+        projectUsers: project.projectUsers.map(pu => ({
+          userId: pu.user.id,
+          name: pu.user.name,
+          email: pu.user.email,
+          rate: safeDecimalToNumber(pu.user.employeeRate)
+        }))
+      }))
+
+      return NextResponse.json(formattedProjects)
+    }
+
+    // ✅ SOLUTION 3: Basic query for regular users
+    const basicProjects = await prisma.project.findMany({
+      where: { active: true },
+      select: {
+        id: true,
+        name: true,
+        color: true,
+        active: true,
+        totalBudget: true,
+        q1Budget: true,
+        q2Budget: true,
+        q3Budget: true,
+        q4Budget: true,
+        q1Spent: true,
+        q2Spent: true,
+        q3Spent: true,
+        q4Spent: true,
+        createdAt: true,
+        updatedAt: true
       },
-      orderBy: [
-        { name: 'asc' }
-      ]
+      orderBy: [{ name: 'asc' }]
     })
 
-    // ✅ FIXED: Safe conversion of all decimal fields with enhanced error handling
-    const formattedProjects = projects.map(project => {
-      try {
-        const formattedProject = {
-          id: project.id,
-          name: project.name,
-          color: project.color,
-          active: project.active,
-          totalBudget: safeDecimalToNumber(project.totalBudget),
-          q1Budget: safeDecimalToNumber(project.q1Budget),
-          q2Budget: safeDecimalToNumber(project.q2Budget),
-          q3Budget: safeDecimalToNumber(project.q3Budget),
-          q4Budget: safeDecimalToNumber(project.q4Budget),
-          q1Spent: safeDecimalToNumber(project.q1Spent),
-          q2Spent: safeDecimalToNumber(project.q2Spent),
-          q3Spent: safeDecimalToNumber(project.q3Spent),
-          q4Spent: safeDecimalToNumber(project.q4Spent),
-          createdAt: project.createdAt,
-          updatedAt: project.updatedAt,
-          // ✅ Include additional fields for detailed requests
-          ...(detailed && {
-            description: project.description,
-            projectUsers: project.projectUsers?.map(pu => ({
-              userId: pu.user.id,
-              name: pu.user.name,
-              email: pu.user.email,
-              rate: safeDecimalToNumber(pu.user.employeeRate)
-            })) || [],
-            timeEntries: project.timeEntries?.map(te => ({
-              id: te.id,
-              date: te.date,
-              hours: safeDecimalToNumber(te.hours),
-              description: te.description,
-              user: {
-                id: te.user.id,
-                name: te.user.name,
-                email: te.user.email,
-                rate: safeDecimalToNumber(te.user.employeeRate)
-              }
-            })) || []
-          }),
-          projectUsers: project.projectUsers || undefined
-        }
-
-        return formattedProject
-      } catch (error) {
-        console.error(`Error formatting project ${project.id}:`, error)
-        // Return a safe fallback
-        return {
-          id: project.id,
-          name: project.name || 'Unknown Project',
-          color: project.color || '#000000',
-          active: project.active !== false,
-          totalBudget: 0,
-          q1Budget: 0,
-          q2Budget: 0,
-          q3Budget: 0,
-          q4Budget: 0,
-          q1Spent: 0,
-          q2Spent: 0,
-          q3Spent: 0,
-          q4Spent: 0,
-          createdAt: project.createdAt,
-          updatedAt: project.updatedAt
-        }
-      }
-    })
+    const formattedProjects = basicProjects.map(project => ({
+      id: project.id,
+      name: project.name,
+      color: project.color,
+      active: project.active,
+      totalBudget: safeDecimalToNumber(project.totalBudget),
+      q1Budget: safeDecimalToNumber(project.q1Budget),
+      q2Budget: safeDecimalToNumber(project.q2Budget),
+      q3Budget: safeDecimalToNumber(project.q3Budget),
+      q4Budget: safeDecimalToNumber(project.q4Budget),
+      q1Spent: safeDecimalToNumber(project.q1Spent),
+      q2Spent: safeDecimalToNumber(project.q2Spent),
+      q3Spent: safeDecimalToNumber(project.q3Spent),
+      q4Spent: safeDecimalToNumber(project.q4Spent),
+      createdAt: project.createdAt,
+      updatedAt: project.updatedAt
+    }))
 
     if (debug) {
       console.log('Debug: Projects API Response:', {
@@ -203,15 +263,15 @@ export async function GET(request: NextRequest) {
       })
     }
 
-    // ✅ Log summary for monitoring
     console.log(`Projects API: Returned ${formattedProjects.length} projects (includeBudget: ${includeBudget}, detailed: ${detailed})`)
 
     return NextResponse.json(formattedProjects)
+
   } catch (error) {
-    console.error('Failed to fetch projects:', error)
+    console.error('Failed to fetch projects:', getErrorMessage(error))
     return NextResponse.json({ 
       error: 'Internal server error',
-      details: process.env.NODE_ENV === 'development' ? error.message : 'An error occurred' 
+      details: process.env.NODE_ENV === 'development' ? getErrorMessage(error) : 'An error occurred' 
     }, { status: 500 })
   }
 }

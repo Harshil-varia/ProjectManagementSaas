@@ -2,6 +2,7 @@ import { prisma } from '@/lib/prisma'
 import { compare } from 'bcrypt'
 import CredentialsProvider from 'next-auth/providers/credentials'
 
+
 export const NEXT_AUTH_CONFIG = {
   secret: process.env.NEXTAUTH_SECRET,
   providers: [

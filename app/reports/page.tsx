@@ -131,6 +131,7 @@ export default function AdminReportsPage() {
       fetchProjects()
     }
   }, [session])
+  
 
   useEffect(() => {
     if (selectedUser && startDate && endDate) {
@@ -344,7 +345,7 @@ export default function AdminReportsPage() {
     setEditDialogOpen(true)
   }
 
-  const handleAddEntry = () => {
+  const handleAddEntry = (date?: Date) => {
     setEditingEntry(null)
     setAddingEntry(true)
     setFormData({
@@ -353,7 +354,7 @@ export default function AdminReportsPage() {
       startTime: '09:00',
       endTime: '17:00',
       duration: 8,
-      date: format(new Date(), 'yyyy-MM-dd')
+      date: format(date || new Date(), 'yyyy-MM-dd')
     })
     setEditDialogOpen(true)
   }
@@ -534,7 +535,7 @@ export default function AdminReportsPage() {
                   <div
                     key={day.toISOString()}
                     className={cn(
-                      "border rounded-lg p-2 min-h-[120px] transition-colors",
+                      "border rounded-lg p-2 min-h-[120px] transition-colors relative",
                       isToday && "border-blue-500 bg-blue-50",
                       !isCurrentMonth && "opacity-50 bg-gray-50",
                       isCurrentMonth && !isToday && "border-gray-200 hover:bg-gray-50"
@@ -610,6 +611,15 @@ export default function AdminReportsPage() {
                         </div>
                       )}
                     </div>
+                    
+                    {/* Add button - always show for all days */}
+                    <button
+                      onClick={() => handleAddEntry(day)}
+                      className="absolute bottom-1 right-1 p-1 rounded-full bg-blue-500 hover:bg-blue-600 text-white shadow-sm transition-colors"
+                      title="Add entry"
+                    >
+                      <Plus className="h-3 w-3" />
+                    </button>
                   </div>
                 )
               })}
@@ -719,14 +729,7 @@ export default function AdminReportsPage() {
                       <FileText className="h-4 w-4" />
                       View Summary Report
                     </Button>
-                    <Button 
-                      onClick={handleAddEntry} 
-                      variant="default"
-                      className="flex items-center gap-2"
-                    >
-                      <Plus className="h-4 w-4" />
-                      Add Entry
-                    </Button>
+                  
                   </div>
                 )}
               </div>
@@ -925,7 +928,7 @@ export default function AdminReportsPage() {
                   <p className="text-gray-500 mb-4">
                     {selectedUserData.name || selectedUserData.email} has no time entries for the selected month.
                   </p>
-                  <Button onClick={handleAddEntry} className="flex items-center gap-2">
+                  <Button onClick={() => handleAddEntry()} className="flex items-center gap-2">
                     <Plus className="h-4 w-4" />
                     Add First Entry
                   </Button>

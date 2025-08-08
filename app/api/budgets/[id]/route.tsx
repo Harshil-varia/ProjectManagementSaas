@@ -8,6 +8,11 @@ import { z } from 'zod'
 import { SpendingCalculator } from '@/lib/spending-calculator'
 import { EnhancedSpendingCalculator } from '@/lib/spending-calculator-enhanced'
 
+
+const getErrorMessage = (error: unknown): string => {
+  if (error instanceof Error) return error.message
+  return String(error)
+}
 // ✅ FIXED: Safe monetary validation with string input
 const budgetUpdateSchema = z.object({
   totalBudget: z
@@ -104,6 +109,7 @@ const safeDecimalToNumber = (decimal: Prisma.Decimal): number => {
     return parseFloat(decimal.toFixed(2))
   }
 }
+
 
 export async function GET(request: NextRequest, { params }: RouteParams) {
   try {
@@ -305,22 +311,25 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
       project: formattedProject
     })
 
-  } catch (error) {
-    console.error('Failed to update budget:', error)
+  }  catch (error) {
+    console.error('Failed to update budget:', getErrorMessage(error))
     
-    // Handle Prisma/Zod errors specifically
-    if (error?.name === 'ZodError') {
-      return NextResponse.json({
-        error: 'Validation failed',
-        details: error.errors
-      }, { status: 400 })
-    }
+    // Handle Prisma/Zod errors specifically with type safety
+    if (error && typeof error === 'object') {
+      // Handle Zod errors
+      if ('name' in error && error.name === 'ZodError') {
+        return NextResponse.json({
+          error: 'Validation failed',
+          details: 'errors' in error ? error.errors : 'Unknown validation error'
+        }, { status: 400 })
+      }
 
-    // Handle Prisma errors
-    if (error?.code === 'P2002') {
-      return NextResponse.json({
-        error: 'Database constraint violation'
-      }, { status: 400 })
+      // Handle Prisma errors
+      if ('code' in error && error.code === 'P2002') {
+        return NextResponse.json({
+          error: 'Database constraint violation'
+        }, { status: 400 })
+      }
     }
 
     return NextResponse.json({ 

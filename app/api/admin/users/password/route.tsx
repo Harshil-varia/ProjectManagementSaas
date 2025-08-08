@@ -22,12 +22,18 @@ const resetPasswordSchema = z.object({
   sendEmail: z.boolean().optional().default(false)
 })
 
+// Helper function to handle errors safely
+const getErrorMessage = (error: unknown): string => {
+  if (error instanceof Error) return error.message
+  return String(error)
+}
+
 // PUT - Create new user
 export async function PUT(request: NextRequest) {
   try {
     const session = await getServerSession(NEXT_AUTH_CONFIG)
     
-    if (!session || session.user.role !== 'ADMIN') {
+    if (!session || session.user?.role !== 'ADMIN') {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
@@ -57,14 +63,14 @@ export async function PUT(request: NextRequest) {
     // Hash password
     const hashedPassword = await bcrypt.hash(password, 12)
 
-    // Create user
+    // Create user - fix employeeRate type issue
     const newUser = await prisma.user.create({
       data: {
         name,
         email,
         password: hashedPassword,
         role,
-        employeeRate: employeeRate || null
+        employeeRate: employeeRate ?? 0 // Use nullish coalescing to provide default value
       },
       select: {
         id: true,
@@ -86,7 +92,7 @@ export async function PUT(request: NextRequest) {
     })
 
   } catch (error) {
-    console.error('Failed to create user:', error)
+    console.error('Failed to create user:', getErrorMessage(error))
     return NextResponse.json({
       error: 'Internal server error'
     }, { status: 500 })
@@ -98,7 +104,7 @@ export async function POST(request: NextRequest) {
   try {
     const session = await getServerSession(NEXT_AUTH_CONFIG)
     
-    if (!session || session.user.role !== 'ADMIN') {
+    if (!session || session.user?.role !== 'ADMIN') {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
@@ -153,18 +159,19 @@ export async function POST(request: NextRequest) {
     })
 
   } catch (error) {
-    console.error('Failed to reset password:', error)
+    console.error('Failed to reset password:', getErrorMessage(error))
     return NextResponse.json({
       error: 'Internal server error'
     }, { status: 500 })
   }
 }
+
 // DELETE - Delete user
 export async function DELETE(request: NextRequest) {
   try {
     const session = await getServerSession(NEXT_AUTH_CONFIG)
     
-    if (!session || session.user.role !== 'ADMIN') {
+    if (!session || session.user?.role !== 'ADMIN') {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
@@ -232,25 +239,21 @@ export async function DELETE(request: NextRequest) {
     })
 
   } catch (error) {
-    console.error('Failed to delete user:', error)
-    
-    // Log detailed error information for debugging
-    if (error instanceof Error) {
-      console.error('Error message:', error.message)
-      console.error('Error stack:', error.stack)
-    }
+    console.error('Failed to delete user:', getErrorMessage(error))
     
     // Handle specific Prisma errors
-    if (error.code === 'P2003') {
-      return NextResponse.json({
-        error: 'Cannot delete user: user has associated records that must be removed first'
-      }, { status: 400 })
-    }
-    
-    if (error.code === 'P2025') {
-      return NextResponse.json({
-        error: 'User not found'
-      }, { status: 404 })
+    if (error && typeof error === 'object' && 'code' in error) {
+      if (error.code === 'P2003') {
+        return NextResponse.json({
+          error: 'Cannot delete user: user has associated records that must be removed first'
+        }, { status: 400 })
+      }
+      
+      if (error.code === 'P2025') {
+        return NextResponse.json({
+          error: 'User not found'
+        }, { status: 404 })
+      }
     }
 
     return NextResponse.json({

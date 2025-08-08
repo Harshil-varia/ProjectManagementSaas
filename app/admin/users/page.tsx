@@ -111,6 +111,10 @@ export default function AdminUsersPage() {
     newPassword: '',
     sendEmail: true
   })
+  const getErrorMessage = (error: unknown): string => {
+  if (error instanceof Error) return error.message
+  return String(error)
+}
 
   const [actionLoading, setActionLoading] = useState(false)
 
@@ -192,7 +196,7 @@ export default function AdminUsersPage() {
       })
       fetchUsers()
     } catch (error) {
-      setError(error.message || 'Failed to create user')
+      setError(getErrorMessage(error) || 'Failed to create user')
     } finally {
       setActionLoading(false)
     }
@@ -230,7 +234,7 @@ export default function AdminUsersPage() {
       })
       setSelectedUserId('')
     } catch (error) {
-      setError(error.message || 'Failed to reset password')
+      setError(getErrorMessage(error) || 'Failed to reset password')
     } finally {
       setActionLoading(false)
     }
@@ -257,7 +261,7 @@ export default function AdminUsersPage() {
       setSelectedUserName('')
       fetchUsers()
     } catch (error) {
-      setError(error.message || 'Failed to delete user')
+      setError(getErrorMessage(error) || 'Failed to delete user')
       setDeleteUserOpen(false)
     } finally {
       setActionLoading(false)

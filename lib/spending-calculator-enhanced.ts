@@ -149,25 +149,25 @@ export class EnhancedSpendingCalculator {
       
       const rate = safeDecimalToNumber(current.rate)
       const effectiveDate = new Date(current.effectiveDate)
-      const endDate = next ? new Date(next.effectiveDate) : null
+      const nextEffectiveDate = next ? new Date(next.effectiveDate) : null
 
-      // Only include periods that overlap with our date range
-      if (endDate && endDate <= startDate) {
-        continue // This period ended before our range
+    if (nextEffectiveDate && nextEffectiveDate <= startDate) {
+          continue // This period ended before our range
+        }
+        
+        // Fixed: Check if effectiveDate is after our end date range (not comparing with null endDate)
+        if (effectiveDate > endDate) {
+          break // This period starts after our range
+        }
+
+        periods.push({
+          rate,
+          effectiveDate: effectiveDate < startDate ? startDate : effectiveDate,
+          endDate: nextEffectiveDate && nextEffectiveDate > endDate ? endDate : nextEffectiveDate
+        })
       }
-      
-      if (effectiveDate > endDate) {
-        break // This period starts after our range
-      }
 
-      periods.push({
-        rate,
-        effectiveDate: effectiveDate < startDate ? startDate : effectiveDate,
-        endDate: endDate && endDate > endDate ? endDate : endDate
-      })
-    }
-
-    return periods
+      return periods
   }
 
   /**

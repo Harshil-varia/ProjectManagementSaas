@@ -8,7 +8,7 @@ import { z } from 'zod'
 
 const createAdminTimeEntrySchema = z.object({
   userId: z.string().min(1, "User ID is required"),
-  projectId: z.string().nullable(),
+  projectId: z.string().min(1, "Project ID is required"),
   description: z.string().optional(),
   startTime: z.string(), // Just the time (HH:MM)
   endTime: z.string().nullable(), // Just the time (HH:MM)
@@ -18,11 +18,11 @@ const createAdminTimeEntrySchema = z.object({
 
 const updateAdminTimeEntrySchema = z.object({
   userId: z.string().min(1, "User ID is required"),
-  projectId: z.string().nullable(),
+  projectId: z.string().min(1, "Project ID is required"),
   description: z.string().optional(),
   startTime: z.string().optional(),
   endTime: z.string().nullable(),
-  duration: z.number().min(0).optional()
+  duration: z.number().min(0).optional() 
 })
 
 // Helper function to check admin authorization
@@ -68,16 +68,14 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Target user not found' }, { status: 404 })
     }
 
-    // Verify project exists if provided
-    if (projectId) {
-      const project = await prisma.project.findUnique({
-        where: { id: projectId },
-        select: { id: true, name: true }
-      })
+    // Verify project exists (now always required)
+    const project = await prisma.project.findUnique({
+      where: { id: projectId },
+      select: { id: true, name: true }
+    })
 
-      if (!project) {
-        return NextResponse.json({ error: 'Project not found' }, { status: 404 })
-      }
+    if (!project) {
+      return NextResponse.json({ error: 'Project not found' }, { status: 404 })
     }
 
     console.log(`Admin ${session.user.email} creating time entry for user ${targetUser.email}`)
@@ -98,11 +96,11 @@ export async function POST(request: NextRequest) {
       endDateTime.setHours(endHours, endMinutes, 0, 0)
     }
 
-    // Create the time entry
+    // Create the time entry - projectId is now guaranteed to be a string
     const timeEntry = await prisma.timeEntry.create({
       data: {
         userId: userId,
-        projectId: projectId,
+        projectId: projectId, // No longer nullable, always a string
         description: description || null,
         startTime: startDateTime,
         endTime: endDateTime,
@@ -128,15 +126,13 @@ export async function POST(request: NextRequest) {
       }
     })
 
-    // Update project spending if project is assigned
-    if (projectId) {
-      try {
-        await EnhancedSpendingCalculator.updateProjectSpendingWithHistory(projectId)
-        console.log(`✅ Updated spending for project ${projectId} after admin time entry creation`)
-      } catch (spendingError) {
-        console.error('Failed to update project spending:', spendingError)
-        // Don't fail the request if spending update fails
-      }
+    // Update project spending (projectId is guaranteed to exist)
+    try {
+      await EnhancedSpendingCalculator.updateProjectSpendingWithHistory(projectId)
+      console.log(`✅ Updated spending for project ${projectId} after admin time entry creation`)
+    } catch (spendingError) {
+      console.error('Failed to update project spending:', spendingError)
+      // Don't fail the request if spending update fails
     }
 
     return NextResponse.json(timeEntry, { status: 201 })

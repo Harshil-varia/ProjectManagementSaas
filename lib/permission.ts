@@ -3,6 +3,10 @@ import { prisma } from "@/lib/prisma";
 import { getServerSession } from "next-auth";
 import { NEXT_AUTH_CONFIG } from "./auth";
 
+  const getErrorMessage = (error: unknown): string => {
+    if (error instanceof Error) return error.message
+    return String(error)
+  }
 export type PermissionType = 'VIEW_REPORTS' | 'EDIT_BUDGETS' | 'FULL_ACCESS'
 
 export interface UserPermissions {
@@ -33,6 +37,8 @@ export class PermissionManager {
       if (!user) {
         throw new Error('User not found')
       }
+
+
 
       const projectPermissions = new Map<string, PermissionType[]>()
       
@@ -354,7 +360,7 @@ export function withPermissions(
       console.error('Permission middleware error:', error)
       return res.status(500).json({ 
         error: 'Internal server error',
-        details: error.message 
+        details: getErrorMessage(error)
       })
     }
   }
@@ -389,7 +395,7 @@ export function withAdminPermissions(
       console.error('Admin permission middleware error:', error)
       return res.status(500).json({ 
         error: 'Internal server error',
-        details: error.message 
+        details: getErrorMessage(error)
       })
     }
   }

@@ -28,12 +28,15 @@ function formatCurrency(amount: number): string {
   }).format(amount)
 }
 
-export async function GET(request: NextRequest, { params }: { params: { id: string } }) {
+export async function GET(
+  request: NextRequest, 
+  { params }: { params: Promise<{ id: string }> }
+) {
   try {
     const session = await getServerSession(NEXT_AUTH_CONFIG)
     if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-    const projectId = params.id
+    const { id: projectId } = await params
     const { searchParams } = new URL(request.url)
     const year = parseInt(searchParams.get('year') || new Date().getFullYear().toString())
     const format = searchParams.get('format') || 'excel'

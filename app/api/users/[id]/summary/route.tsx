@@ -44,7 +44,7 @@ interface UserSummaryData {
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }>}
 ) {
   try {
     const session = await getServerSession(NEXT_AUTH_CONFIG)
@@ -58,7 +58,7 @@ export async function GET(
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
 
-    const userId = await params.id
+    const userId = (await params).id
     const { searchParams } = new URL(request.url)
     
     // Get date range from query params
