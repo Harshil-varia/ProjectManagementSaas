@@ -60,7 +60,7 @@ export async function GET(request: NextRequest) {
             id: true,
             name: true,
             color: true,
-            description: true
+            code: true
           }
         }
       },
@@ -153,7 +153,7 @@ export async function GET(request: NextRequest) {
           employeeRate: Number(entry.user.employeeRate), // Current rate for display
           projectId: entry.project.id,
           projectName: entry.project.name,
-          projectCode: entry.project.description,
+          projectCode: entry.project.code,
           aggregatedHours: hours,
           totalCost: cost,
           ratePeriods,

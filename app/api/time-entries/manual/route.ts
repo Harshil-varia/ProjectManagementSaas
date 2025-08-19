@@ -6,24 +6,29 @@ import { prisma } from '@/lib/prisma'
 export async function POST(request: NextRequest) {
   const session = await getServerSession(NEXT_AUTH_CONFIG)
   const getErrorMessage = (error: unknown): string => {
-  if (error instanceof Error) return error.message
-  return String(error)
-}
+    if (error instanceof Error) return error.message
+    return String(error)
+  }
+  
   if (!session) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
   try {
-    const { projectId, description, startTime, endTime, duration } = await request.json()
+    const { projectId, description, startTime, endTime } = await request.json()
 
     const startDateTime = new Date(startTime)
     const endDateTime = new Date(endTime)
 
+    // Calculate duration from startTime and endTime (in minutes)
+    const duration = Math.round((endDateTime.getTime() - startDateTime.getTime()) / (1000 * 60))
+    
     // Calculate hours from duration (duration is in minutes) as Decimal
     const hours = duration / 60
 
     // Extract date from startTime (normalized to start of day)
     const date = new Date(startDateTime.getFullYear(), startDateTime.getMonth(), startDateTime.getDate())
+    
 
     const timeEntry = await prisma.timeEntry.create({
       data: {

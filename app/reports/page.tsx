@@ -15,14 +15,17 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { Label } from '@/components/ui/label'
 import { 
   Loader2, BarChart3, Clock, Calendar as CalendarIcon, Users, Shield, 
-  FileText, Download, Edit2, Trash2, Plus, RefreshCw
+  FileText, Download, Edit2, Trash2, Plus, RefreshCw, ChevronLeft, ChevronRight
 } from 'lucide-react'
 import { 
-  format, startOfWeek, endOfWeek, eachDayOfInterval, addMonths, subMonths, 
-  isSameDay, parseISO, startOfYear, endOfYear, startOfMonth, endOfMonth, eachWeekOfInterval
+  format, startOfWeek, endOfWeek, eachDayOfInterval, 
+  isSameDay, parseISO, startOfYear, endOfYear,
+  addWeeks, subWeeks, addDays, subDays,
+  startOfDay, endOfDay
 } from 'date-fns'
 import { cn } from '@/lib/utils'
 import { toast } from 'sonner'
+import { setHours, setMinutes, setSeconds } from 'date-fns'
 
 interface User {
   id: string
@@ -35,6 +38,7 @@ interface Project {
   id: string
   name: string
   color: string
+  code: string
 }
 
 interface TimeEntry {
@@ -71,17 +75,16 @@ export default function AdminReportsPage() {
   const [reportData, setReportData] = useState<ReportData | null>(null)
   const [loading, setLoading] = useState(true)
   const [exporting, setExporting] = useState(false)
-  const [period] = useState('month') // Fixed to month
+  const [refreshing, setRefreshing] = useState(false)
   
   // Cache management for better performance and data consistency
   const [reportCache, setReportCache] = useState<Map<string, ReportData>>(new Map())
   
-  // Date navigation - only month view
+  // Date navigation - week and day view like first file
   const [selectedDate, setSelectedDate] = useState(new Date())
-  
-  // Date range state for filtering
-  const [startDate, setStartDate] = useState<Date>(startOfMonth(new Date()))
-  const [endDate, setEndDate] = useState<Date>(endOfMonth(new Date()))
+  const [viewMode, setViewMode] = useState<'week' | 'day'>('week')
+  const [startDate, setStartDate] = useState<Date>(startOfWeek(new Date(), { weekStartsOn: 1 }))
+  const [endDate, setEndDate] = useState<Date>(endOfWeek(new Date(), { weekStartsOn: 1 }))
 
   // Edit/Add entry state
   const [editingEntry, setEditingEntry] = useState<TimeEntry | null>(null)
@@ -96,7 +99,6 @@ export default function AdminReportsPage() {
     description: '',
     startTime: '',
     endTime: '',
-    duration: 0,
     date: format(new Date(), 'yyyy-MM-dd')
   })
 
@@ -109,21 +111,20 @@ export default function AdminReportsPage() {
     }
   }, [session, status, router])
 
-  // Update date ranges when selected date changes
+  // Update date ranges when selected date or view mode changes (same as first file)
   useEffect(() => {
-    const monthStart = startOfMonth(selectedDate)
-    const monthEnd = endOfMonth(selectedDate)
-    setStartDate(monthStart)
-    setEndDate(monthEnd)
-  }, [selectedDate])
-
-  // Auto-refresh data when month changes (if user is selected)
-  useEffect(() => {
-    if (selectedUser && startDate && endDate) {
-      // Force refresh when month changes
-      fetchReports(true)
+    if (viewMode === 'week') {
+      const weekStart = startOfWeek(selectedDate, { weekStartsOn: 1 })
+      const weekEnd = endOfWeek(selectedDate, { weekStartsOn: 1 })
+      setStartDate(weekStart)
+      setEndDate(weekEnd)
+    } else {
+      const dayStart = startOfDay(selectedDate)
+      const dayEnd = endOfDay(selectedDate)
+      setStartDate(dayStart)
+      setEndDate(dayEnd)
     }
-  }, [selectedDate]) // Only depends on selectedDate to trigger refresh on month change
+  }, [selectedDate, viewMode])
 
   useEffect(() => {
     if (session && session.user.role === 'ADMIN') {
@@ -131,13 +132,12 @@ export default function AdminReportsPage() {
       fetchProjects()
     }
   }, [session])
-  
 
   useEffect(() => {
     if (selectedUser && startDate && endDate) {
-      fetchReports(false) // Use cache if available (for initial load)
+      fetchReports(false) // Use cache if available
     }
-  }, [selectedUser, startDate, endDate]) // This handles initial load and user changes
+  }, [selectedUser, selectedDate, viewMode])
 
   const fetchUsers = async () => {
     try {
@@ -180,10 +180,12 @@ export default function AdminReportsPage() {
       return
     }
 
-    setLoading(true)
+    if (forceRefresh) setRefreshing(true)
+    else setLoading(true)
+    
     try {
       const params = new URLSearchParams({
-        period,
+        period: 'custom',
         userId: selectedUser,
         startDate: startDate.toISOString(),
         endDate: endDate.toISOString()
@@ -203,6 +205,7 @@ export default function AdminReportsPage() {
       console.error('Failed to fetch reports:', error)
     } finally {
       setLoading(false)
+      setRefreshing(false)
     }
   }
 
@@ -226,19 +229,57 @@ export default function AdminReportsPage() {
       return newCache
     })
   }
+  const hasOverlap = (newStart: Date, newEnd: Date | null, excludeId?: string): boolean => {
+  if (!reportData) return false;
+  
+  return reportData.entries.some(entry => {
+    if (entry.id === excludeId) return false;
+    
+    const existingStart = parseISO(entry.start);
+    const existingEnd = entry.end ? parseISO(entry.end) : new Date();
+    
+    // Check if new entry overlaps with existing entry
+    return (
+      (newStart >= existingStart && newStart < existingEnd) ||
+      (newEnd && newEnd > existingStart && newEnd <= existingEnd) ||
+      (newStart <= existingStart && newEnd && newEnd >= existingEnd)
+    );
+  });
+};
+
+  // Navigation functions (same as first file)
+  const goToPrevious = () => {
+    if (viewMode === 'week') {
+      setSelectedDate(prev => subWeeks(prev, 1))
+    } else {
+      setSelectedDate(prev => subDays(prev, 1))
+    }
+  }
+
+  const goToNext = () => {
+    if (viewMode === 'week') {
+      setSelectedDate(prev => addWeeks(prev, 1))
+    } else {
+      setSelectedDate(prev => addDays(prev, 1))
+    }
+  }
+
+  const goToCurrent = () => {
+    setSelectedDate(new Date())
+  }
 
   // Force refresh function
   const handleForceRefresh = async () => {
     if (!selectedUser) return
     
-    // Clear all cache for current user
+    // Clear cache for current period
+    const cacheKey = viewMode === 'week' 
+      ? `${selectedUser}-${format(startOfWeek(selectedDate, { weekStartsOn: 1 }), 'yyyy-MM-dd')}`
+      : `${selectedUser}-${format(selectedDate, 'yyyy-MM-dd')}`
+    
     setReportCache(prev => {
       const newCache = new Map(prev)
-      for (const key of newCache.keys()) {
-        if (key.startsWith(selectedUser)) {
-          newCache.delete(key)
-        }
-      }
+      newCache.delete(cacheKey)
       return newCache
     })
     
@@ -249,20 +290,11 @@ export default function AdminReportsPage() {
   const formatHours = (hours: number) => `${hours.toFixed(1)}h`
   const formatTime = (dateString: string) => format(parseISO(dateString), 'HH:mm')
   
-  // Navigation functions with automatic refresh
-  const goToPreviousMonth = () => {
-    setSelectedDate(prev => subMonths(prev, 1))
-    // No need for setTimeout - useEffect will handle the refresh
-  }
-
-  const goToNextMonth = () => {
-    setSelectedDate(prev => addMonths(prev, 1))
-    // No need for setTimeout - useEffect will handle the refresh
-  }
-
-  const goToCurrentMonth = () => {
-    setSelectedDate(new Date())
-    // No need for setTimeout - useEffect will handle the refresh
+  const formatDuration = (minutes: number | null) => {
+    if (!minutes) return 'Running...'
+    const hours = Math.floor(minutes / 60)
+    const mins = minutes % 60
+    return `${hours}h ${mins}m`
   }
 
   const getEntriesForDate = (date: Date) => {
@@ -275,21 +307,6 @@ export default function AdminReportsPage() {
   const getTotalDurationForDate = (date: Date) => {
     const entries = getEntriesForDate(date)
     return entries.reduce((total, entry) => total + entry.duration, 0)
-  }
-
-  const handleDateRangeQuickSelect = (type: 'thisMonth' | 'lastMonth') => {
-    const now = new Date()
-    switch (type) {
-      case 'thisMonth':
-        setSelectedDate(now)
-        // useEffect will handle the refresh automatically
-        break
-      case 'lastMonth':
-        const lastMonth = subMonths(now, 1)
-        setSelectedDate(lastMonth)
-        // useEffect will handle the refresh automatically
-        break
-    }
   }
 
   const handleViewSummaryReport = () => {
@@ -330,6 +347,7 @@ export default function AdminReportsPage() {
     }
   }
 
+
   // Entry management functions
   const handleEditEntry = (entry: TimeEntry) => {
     setEditingEntry(entry)
@@ -339,25 +357,28 @@ export default function AdminReportsPage() {
       description: entry.description || '',
       startTime: format(startDate, 'HH:mm'),
       endTime: entry.end ? format(parseISO(entry.end), 'HH:mm') : '',
-      duration: entry.duration / 60, // Convert minutes to hours for display
       date: format(startDate, 'yyyy-MM-dd')
     })
     setEditDialogOpen(true)
   }
 
-  const handleAddEntry = (date?: Date) => {
+  const handleAddEntry = (date?: Date, startTime?: string) => {
     setEditingEntry(null)
     setAddingEntry(true)
-    setFormData({
-      projectId: '',
-      description: '',
-      startTime: '09:00',
-      endTime: '17:00',
-      duration: 8,
-      date: format(date || new Date(), 'yyyy-MM-dd')
-    })
-    setEditDialogOpen(true)
-  }
+     const start = startTime ? parseISO(`${format(date || new Date(), 'yyyy-MM-dd')}T${startTime}`) : new Date();
+    const end = startTime ? new Date(start.getTime() + 30 * 60000) : new Date(start.getTime() + 8 * 3600 * 1000);
+      const defaultDurationInMinutes = 30; // Default duration of 30 minutes
+
+
+ setFormData({
+    projectId: '',
+    description: '',
+    startTime: format(startDate, 'HH:mm'),
+    endTime: format(endDate, 'HH:mm'),
+    date: format(date || new Date(), 'yyyy-MM-dd')
+  });
+  setEditDialogOpen(true);
+};
 
   // Enhanced handleSaveEntry with cache invalidation
   const handleSaveEntry = async () => {
@@ -371,10 +392,11 @@ export default function AdminReportsPage() {
           ? new Date(`${formData.date}T${formData.endTime}`)
           : null
 
-        const duration = endDateTime 
-          ? Math.floor((endDateTime.getTime() - startDateTime.getTime()) / 60000)
-          : formData.duration * 60
-
+            if (hasOverlap(startDateTime, endDateTime, editingEntry?.id)) {
+              toast.error('This time entry overlaps with an existing entry. Please choose a different time.');
+              return;
+            }
+          
         const response = await fetch(`/api/admin/time-entries/${editingEntry.id}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
@@ -384,7 +406,6 @@ export default function AdminReportsPage() {
             description: formData.description,
             startTime: formData.startTime,
             endTime: formData.endTime || null,
-            duration,
             date: formData.date
           })
         })
@@ -414,9 +435,7 @@ export default function AdminReportsPage() {
           ? new Date(`${formData.date}T${formData.endTime}`)
           : null
 
-        const duration = endDateTime 
-          ? Math.floor((endDateTime.getTime() - startDateTime.getTime()) / 60000)
-          : formData.duration * 60
+        
 
         const response = await fetch('/api/admin/time-entries', {
           method: 'POST',
@@ -427,13 +446,11 @@ export default function AdminReportsPage() {
             description: formData.description,
             startTime: formData.startTime,
             endTime: formData.endTime || null,
-            duration,
             date: formData.date
           })
         })
 
         if (response.ok) {
-          const responseData = await response.json()
           toast.success('Entry created successfully')
           setEditDialogOpen(false)
           setAddingEntry(false)
@@ -441,11 +458,14 @@ export default function AdminReportsPage() {
           // Clear cache for the new entry date
           clearCacheForDate(entryDate, selectedUser)
           
-          // If the new entry is in the current view, refresh immediately
-          if (entryDate >= startDate && entryDate <= endDate) {
+          // Check if the new entry is in current view
+          const isInCurrentView = viewMode === 'week' 
+            ? entryDate >= startDate && entryDate <= endDate
+            : isSameDay(entryDate, selectedDate)
+          
+          if (isInCurrentView) {
             await fetchReports(true)
           } else {
-            // Entry is outside current view - notify user
             toast.info(`Entry added for ${format(entryDate, 'MMM dd, yyyy')}. Navigate to that date to see it.`)
           }
         } else {
@@ -499,138 +519,263 @@ export default function AdminReportsPage() {
     }
   }
 
-  // Render month calendar view with enhanced entry management
-  const renderMonthView = () => {
-    const monthStart = startOfMonth(selectedDate)
-    const monthEnd = endOfMonth(selectedDate)
-    const weeks = eachWeekOfInterval({ start: monthStart, end: monthEnd }, { weekStartsOn: 1 })
+  const renderWeekView = () => {
+    const weekStart = startOfWeek(selectedDate, { weekStartsOn: 1 })
+    const weekDays = eachDayOfInterval({
+      start: weekStart,
+      end: endOfWeek(weekStart, { weekStartsOn: 1 })
+    })
     
     return (
       <div className="space-y-2">
-        {/* Month header */}
+        {/* Week header */}
         <div className="grid grid-cols-7 gap-2 mb-4">
-          {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map((day) => (
-            <div key={day} className="text-center font-medium p-2 text-sm text-gray-600">
-              {day}
+          {weekDays.map((day) => (
+            <div key={day.toISOString()} className="text-center">
+              <div className="font-medium text-sm text-gray-600 mb-1">
+                {format(day, 'EEE')}
+              </div>
+              <div className={cn(
+                "text-lg font-semibold p-2 rounded cursor-pointer hover:bg-gray-100 transition-colors",
+                isSameDay(day, new Date()) && "bg-blue-100 text-blue-700",
+                isSameDay(day, selectedDate) && "bg-blue-500 text-white"
+              )}
+              onClick={() => {
+                setSelectedDate(day)
+                setViewMode('day')
+              }}
+              >
+                {format(day, 'd')}
+              </div>
             </div>
           ))}
         </div>
         
-        {/* Month days */}
-        {weeks.map((weekStart, weekIndex) => {
-          const weekDays = eachDayOfInterval({
-            start: startOfWeek(weekStart, { weekStartsOn: 1 }),
-            end: endOfWeek(weekStart, { weekStartsOn: 1 })
-          })
-          
-          return (
-            <div key={weekIndex} className="grid grid-cols-7 gap-2">
-              {weekDays.map((day) => {
-                const entries = getEntriesForDate(day)
-                const totalHours = getTotalDurationForDate(day)
-                const isToday = isSameDay(day, new Date())
-                const isCurrentMonth = day >= monthStart && day <= monthEnd
+        {/* Week days */}
+        <div className="grid grid-cols-7 gap-2">
+          {weekDays.map((day) => {
+            const entries = getEntriesForDate(day)
+            const totalMinutes = getTotalDurationForDate(day)
+            const isToday = isSameDay(day, new Date())
+            
+            return (
+              <div
+                key={day.toISOString()}
+                className={cn(
+                  "border rounded-lg p-2 min-h-[200px] transition-colors relative",
+                  isToday && "border-blue-500 bg-blue-50",
+                  !isToday && "border-gray-200 hover:bg-gray-50"
+                )}
+              >
+                <div className="flex items-center justify-between mb-2">
+                  <span className={cn(
+                    "text-sm font-medium",
+                    isToday ? "text-blue-700" : "text-gray-700"
+                  )}>
+                    {format(day, 'MMM d')}
+                  </span>
+                </div>
                 
-                return (
-                  <div
-                    key={day.toISOString()}
-                    className={cn(
-                      "border rounded-lg p-2 min-h-[120px] transition-colors relative",
-                      isToday && "border-blue-500 bg-blue-50",
-                      !isCurrentMonth && "opacity-50 bg-gray-50",
-                      isCurrentMonth && !isToday && "border-gray-200 hover:bg-gray-50"
-                    )}
-                  >
-                    <div className="flex items-center justify-between mb-1">
-                      <span className={cn(
-                        "text-sm font-medium",
-                        isToday ? "text-blue-700" : "text-gray-700"
-                      )}>
-                        {format(day, 'd')}
-                      </span>
-                    </div>
-                    
-                    {totalHours > 0 && (
-                      <Badge variant="secondary" className="text-xs mb-1">
-                        {formatHours(totalHours)}
-                      </Badge>
-                    )}
-                    
-                    <div className="space-y-1">
-                      {entries.slice(0, 3).map((entry) => (
-                        <div
-                          key={entry.id}
-                          className="text-xs p-1 rounded bg-white border-l-2 cursor-pointer hover:bg-gray-50 group relative"
-                          style={{ borderLeftColor: entry.project?.color || '#gray' }}
-                        >
-                          {/* Entry content */}
-                          <div onClick={() => handleEditEntry(entry)}>
-                            <div className="font-medium truncate pr-6">
-                              {entry.project?.name || 'No Project'}
-                            </div>
-                            <div className="text-gray-500 truncate">
-                              {formatHours(entry.duration)}
-                            </div>
-                            <div className="text-gray-400 truncate text-[10px]">
-                              {formatTime(entry.start)} - {entry.end ? formatTime(entry.end) : 'Running'}
-                            </div>
-                          </div>
-                          
-                          {/* Action buttons - only show on hover */}
-                          <div className="absolute top-1 right-1 opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1 bg-white rounded shadow-sm">
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation()
-                                handleEditEntry(entry)
-                              }}
-                              className="p-1 hover:bg-blue-50 rounded"
-                              title="Edit entry"
-                            >
-                              <Edit2 className="h-3 w-3 text-blue-600" />
-                            </button>
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation()
-                                handleDeleteEntry(entry)
-                              }}
-                              className="p-1 hover:bg-red-50 rounded"
-                              title="Delete entry"
-                            >
-                              <Trash2 className="h-3 w-3 text-red-600" />
-                            </button>
-                          </div>
-                        </div>
-                      ))}
-                      {entries.length > 3 && (
-                        <div className="text-xs text-gray-500 text-center cursor-pointer hover:text-gray-700"
-                             onClick={() => {
-                               // Could expand to show all entries or navigate to detailed view
-                               toast.info(`${entries.length} total entries for ${format(day, 'MMM dd')}`)
-                             }}>
-                          +{entries.length - 3} more
-                        </div>
-                      )}
-                    </div>
-                    
-                    {/* Add button - always show for all days */}
-                    <button
-                      onClick={() => handleAddEntry(day)}
-                      className="absolute bottom-1 right-1 p-1 rounded-full bg-blue-500 hover:bg-blue-600 text-white shadow-sm transition-colors"
-                      title="Add entry"
+                {totalMinutes > 0 && (
+                  <Badge variant="secondary" className="text-xs mb-2">
+                    {formatHours(totalMinutes)}
+                  </Badge>
+                )}
+                
+                <div className="space-y-1">
+                  {entries.slice(0, 4).map((entry) => (
+                    <div
+                      key={entry.id}
+                      className="text-xs p-1 rounded bg-white border-l-2 cursor-pointer hover:bg-gray-50 group relative"
+                      style={{ borderLeftColor: entry.project?.color || '#gray' }}
                     >
-                      <Plus className="h-3 w-3" />
-                    </button>
-                  </div>
-                )
-              })}
-            </div>
-          )
-        })}
+                     {/* Entry content */}
+                      <div onClick={() => handleEditEntry(entry)}>
+                        <div className="font-medium truncate pr-6">
+                          {entry.project?.name || 'No Project'}
+                        </div>
+                        <div className="text-gray-500 truncate">
+                          {formatHours(entry.duration)}
+                        </div>
+                         <div className="text-gray-400 truncate text-[10px]">
+                          {formatTime(entry.start)} - {entry.end ? formatTime(entry.end) : 'Running'}
+                        </div>
+                        {entry.description && (
+                          <div className="text-gray-500 truncate text-[10px] mt-1">
+                            {entry.description}
+                          </div>
+                        )}
+                      </div>
+                      
+                      {/* Action buttons */}
+                      <div className="absolute top-1 right-1 opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1 bg-white rounded shadow-sm">
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            handleEditEntry(entry)
+                          }}
+                          className="p-1 hover:bg-blue-50 rounded"
+                          title="Edit entry"
+                        >
+                          <Edit2 className="h-3 w-3 text-blue-600" />
+                        </button>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            handleDeleteEntry(entry)
+                          }}
+                          className="p-1 hover:bg-red-50 rounded"
+                          title="Delete entry"
+                        >
+                          <Trash2 className="h-3 w-3 text-red-600" />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                  {entries.length > 4 && (
+                    <div 
+                      className="text-xs text-gray-500 text-center cursor-pointer hover:text-gray-700"
+                      onClick={() => {
+                        setSelectedDate(day)
+                        setViewMode('day')
+                      }}
+                    >
+                      +{entries.length - 4} more
+                    </div>
+                  )}
+                </div>
+                
+                {/* Add button */}
+                <button
+                  onClick={() => handleAddEntry(day)}
+                  className="absolute bottom-1 right-1 p-1 rounded-full bg-blue-500 hover:bg-blue-600 text-white shadow-sm transition-colors"
+                  title="Add entry"
+                >
+                  <Plus className="h-3 w-3" />
+                </button>
+              </div>
+            )
+          })}
+        </div>
       </div>
     )
   }
 
+const renderDayView = () => {
+  const entries = getEntriesForDate(selectedDate);
+  const totalMinutes = getTotalDurationForDate(selectedDate);
+  const isToday = isSameDay(selectedDate, new Date());
+
+  return (
+    <div className="space-y-4">
+      {/* Day header */}
+      <div className="text-center">
+        <h3 className={cn(
+          "text-2xl font-semibold mb-2",
+          isToday ? "text-blue-700" : "text-gray-900"
+        )}>
+          {format(selectedDate, 'EEEE, MMMM d, yyyy')}
+        </h3>
+        <div className="flex items-center justify-center gap-4">
+          {totalMinutes > 0 && (
+            <Badge variant="secondary" className="text-sm">
+              Total: {formatHours(totalMinutes)}
+            </Badge>
+          )}
+        </div>
+      </div>
+
+      {/* Day entries */}
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between">
+          <CardTitle className="text-lg">Time Entries</CardTitle>
+          <Button onClick={() => handleAddEntry(selectedDate)} size="sm">
+            <Plus className="h-4 w-4 mr-2" />
+            Add Entry
+          </Button>
+        </CardHeader>
+        <CardContent>
+          {entries.length === 0 ? (
+            <div className="text-center py-8 text-gray-500">
+              <Clock className="h-12 w-12 mx-auto mb-4 text-gray-300" />
+              <p>No entries for this day</p>
+              <Button 
+                variant="outline" 
+                className="mt-4"
+                onClick={() => handleAddEntry(selectedDate)}
+              >
+                Add First Entry
+              </Button>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {entries.map((entry) => (
+                <div
+                  key={entry.id}
+                  className="border rounded-lg p-4 hover:bg-gray-50 transition-colors group"
+                  style={{ borderLeftWidth: '4px', borderLeftColor: entry.project?.color || '#gray' }}
+                >
+                  {/* Entry content */}
+                      <div onClick={() => handleEditEntry(entry)}>
+                        <div className="font-medium truncate pr-6">
+                          {entry.project?.name || 'No Project'}
+                        </div>
+                        <div className="text-gray-500 truncate">
+                          {formatHours(entry.duration)}
+                        </div>
+                         <div className="text-gray-400 truncate text-[10px]">
+                          {formatTime(entry.start)} - {entry.end ? formatTime(entry.end) : 'Running'}
+                        </div>
+                        {entry.description && (
+                          <div className="text-gray-500 truncate text-[10px] mt-1">
+                            {entry.description}
+                          </div>
+                        )}
+                      </div>
+                     <div className="absolute top-1 right-1 opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1 bg-white rounded shadow-sm">
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            handleEditEntry(entry)
+                          }}
+                          className="p-1 hover:bg-blue-50 rounded"
+                          title="Edit entry"
+                        >
+                          <Edit2 className="h-3 w-3 text-blue-600" />
+                        </button>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            handleDeleteEntry(entry)
+                          }}
+                          className="p-1 hover:bg-red-50 rounded"
+                          title="Delete entry"
+                        >
+                          <Trash2 className="h-3 w-3 text-red-600" />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  );
+};
+
+
   const selectedUserData = users.find(u => u.id === selectedUser)
+
+  const getViewModeLabel = () => {
+    if (viewMode === 'week') {
+      const weekStart = startOfWeek(selectedDate, { weekStartsOn: 1 })
+      const weekEnd = endOfWeek(selectedDate, { weekStartsOn: 1 })
+      return `Week of ${format(weekStart, 'MMM d')} - ${format(weekEnd, 'MMM d, yyyy')}`
+    } else {
+      return format(selectedDate, 'EEEE, MMMM d, yyyy')
+    }
+  }
 
   // Show access denied for non-admin users
   if (status === 'loading') {
@@ -679,108 +824,54 @@ export default function AdminReportsPage() {
           </div>
         </div>
 
-        {/* User Selection & Date Filter */}
+        {/* User Selection */}
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Users className="h-5 w-5" />
-              User Selection & Month Navigation
+              User Selection
             </CardTitle>
-            <CardDescription>Select a user and navigate through months</CardDescription>
+            <CardDescription>Select a user to view and manage their time entries</CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="space-y-4">
-              {/* User Selection Row */}
-              <div className="flex gap-4 items-center">
-                <Select value={selectedUser} onValueChange={setSelectedUser}>
-                  <SelectTrigger className="w-[300px]">
-                    <SelectValue placeholder="Select a user to view reports" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {users.map((user) => (
-                      <SelectItem key={user.id} value={user.id}>
-                        <div className="flex items-center justify-between w-full">
-                          <span>{user.name || user.email}</span>
-                          <Badge variant={user.role === 'ADMIN' ? 'default' : 'secondary'} className="ml-2">
-                            {user.role}
-                          </Badge>
-                        </div>
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+            <div className="flex gap-4 items-center">
+              <Select value={selectedUser} onValueChange={setSelectedUser}>
+                <SelectTrigger className="w-[300px]">
+                  <SelectValue placeholder="Select a user to view reports" />
+                </SelectTrigger>
+                <SelectContent>
+                  {users.map((user) => (
+                    <SelectItem key={user.id} value={user.id}>
+                      <div className="flex items-center justify-between w-full">
+                        <span>{user.name || user.email}</span>
+                        <Badge variant={user.role === 'ADMIN' ? 'default' : 'secondary'} className="ml-2">
+                          {user.role}
+                        </Badge>
+                      </div>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
 
-                {selectedUser && (
-                  <div className="flex gap-2">
-                    <Button 
-                      onClick={handleForceRefresh} 
-                      variant="outline"
-                      disabled={loading}
-                      className="flex items-center gap-2"
-                    >
-                      <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
-                      Refresh
-                    </Button>
-                    <Button 
-                      onClick={handleViewSummaryReport} 
-                      variant="default"
-                      className="flex items-center gap-2"
-                    >
-                      <FileText className="h-4 w-4" />
-                      View Summary Report
-                    </Button>
-                  
-                  </div>
-                )}
-              </div>
-
-              {/* Month Navigation */}
               {selectedUser && (
-                <div className="border-t pt-4 space-y-4">
-                  <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center">
-                    {/* Month Selection */}
-                    <div className="space-y-2">
-                      <label className="text-sm font-medium">Month</label>
-                      <div className="flex gap-2">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={goToPreviousMonth}
-                        >
-                          ←
-                        </Button>
-                        <div className="min-w-[120px] text-center py-2 px-3 border rounded">
-                          {format(selectedDate, 'MMM yyyy')}
-                        </div>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={goToNextMonth}
-                        >
-                          →
-                        </Button>
-                      </div>
-                    </div>
-
-                    <div className="space-y-2">
-                      <label className="text-sm font-medium">Quick Select</label>
-                      <div className="flex gap-2">
-                        <Button variant="ghost" size="sm" onClick={() => handleDateRangeQuickSelect('thisMonth')}>
-                          This Month
-                        </Button>
-                        <Button variant="ghost" size="sm" onClick={() => handleDateRangeQuickSelect('lastMonth')}>
-                          Last Month
-                        </Button>
-                        <Button variant="ghost" size="sm" onClick={goToCurrentMonth}>
-                          Current Month
-                        </Button>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="text-xs text-gray-600">
-                    Showing month of: {format(selectedDate, 'MMMM yyyy')}
-                  </div>
+                <div className="flex gap-2">
+                  <Button 
+                    onClick={handleForceRefresh} 
+                    variant="outline"
+                    disabled={refreshing}
+                    className="flex items-center gap-2"
+                  >
+                    <RefreshCw className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} />
+                    Refresh
+                  </Button>
+                  <Button 
+                    onClick={handleViewSummaryReport} 
+                    variant="default"
+                    className="flex items-center gap-2"
+                  >
+                    <FileText className="h-4 w-4" />
+                    View Summary Report
+                  </Button>
                 </div>
               )}
             </div>
@@ -793,7 +884,7 @@ export default function AdminReportsPage() {
             <Card>
               <CardHeader>
                 <CardTitle>
-                  Monthly Report for: {selectedUserData.name || selectedUserData.email}
+                  Time Entries for: {selectedUserData.name || selectedUserData.email}
                 </CardTitle>
                 <CardDescription className="flex items-center gap-2">
                   <span>{selectedUserData.email}</span>
@@ -804,28 +895,89 @@ export default function AdminReportsPage() {
               </CardHeader>
             </Card>
 
-            {/* Calendar View */}
+            {/* Navigation and View Controls (same as first file) */}
             <Card>
               <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <CalendarIcon className="h-5 w-5" />
+                  Navigation & View
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
                 <div className="flex items-center justify-between">
-                  <CardTitle className="flex items-center gap-2">
-                    <CalendarIcon className="h-5 w-5" />
-                    Monthly Calendar View
-                  </CardTitle>
                   <div className="flex items-center gap-2">
-                    <Button 
-                      variant="outline" 
-                      size="sm" 
-                      onClick={goToCurrentMonth}
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={goToPrevious}
                     >
-                      Current Month
+                      <ChevronLeft className="h-4 w-4" />
+                    </Button>
+                    <div className="min-w-[200px] text-center py-2 px-3 border rounded">
+                      {getViewModeLabel()}
+                    </div>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={goToNext}
+                    >
+                      <ChevronRight className="h-4 w-4" />
+                    </Button>
+                  </div>
+                  
+                  <div className="flex items-center gap-2">
+                    <div className="flex rounded-md overflow-hidden border">
+                      <Button
+                        variant={viewMode === 'week' ? 'default' : 'outline'}
+                        size="sm"
+                        onClick={() => setViewMode('week')}
+                        className="rounded-none border-0"
+                      >
+                        Week
+                      </Button>
+                      <Button
+                        variant={viewMode === 'day' ? 'default' : 'outline'}
+                        size="sm"
+                        onClick={() => setViewMode('day')}
+                        className="rounded-none border-0"
+                      >
+                        Day
+                      </Button>
+                    </div>
+                    <Button
+                      variant="outline"
+                      onClick={goToCurrent}
+                    >
+                      {viewMode === 'week' ? 'Current Week' : 'Today'}
+                    </Button>
+                    <Button
+                      variant="outline"
+                      onClick={handleForceRefresh}
+                      disabled={refreshing}
+                      className="flex items-center gap-2"
+                    >
+                      <RefreshCw className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} />
+                      Refresh
                     </Button>
                   </div>
                 </div>
-                <CardDescription>
-                  {format(selectedDate, 'MMMM yyyy')}
-                  <span className="ml-2 text-xs text-blue-600">Click entries to edit • Hover for edit/delete buttons</span>
-                </CardDescription>
+              </CardContent>
+            </Card>
+
+            {/* Calendar View */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center justify-between">
+                  <span>{viewMode === 'week' ? 'Week View' : 'Day View'}</span>
+                  <div className="flex items-center gap-4 text-sm text-gray-600">
+                    <span>
+                      {viewMode === 'week' 
+                        ? 'Click dates for day view • Click entries to edit • Hover for actions'
+                        : 'Click entries to edit • Hover for actions'
+                      }
+                    </span>
+                  </div>
+                </CardTitle>
               </CardHeader>
               <CardContent>
                 {loading ? (
@@ -833,7 +985,7 @@ export default function AdminReportsPage() {
                     <Loader2 className="h-6 w-6 animate-spin" />
                   </div>
                 ) : (
-                  renderMonthView()
+                  viewMode === 'week' ? renderWeekView() : renderDayView()
                 )}
               </CardContent>
             </Card>
@@ -844,14 +996,14 @@ export default function AdminReportsPage() {
                 <Card>
                   <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                     <CardTitle className="text-sm font-medium">
-                      Total Hours (Month)
+                      Total Hours ({viewMode === 'week' ? 'Week' : 'Day'})
                     </CardTitle>
                     <Clock className="h-4 w-4 text-muted-foreground" />
                   </CardHeader>
                   <CardContent>
                     <div className="text-2xl font-bold">{formatHours(reportData.totalHours)}</div>
                     <p className="text-xs text-muted-foreground">
-                      {format(selectedDate, 'MMM yyyy')}
+                      {getViewModeLabel()}
                     </p>
                   </CardContent>
                 </Card>
@@ -890,7 +1042,7 @@ export default function AdminReportsPage() {
                 <CardHeader>
                   <CardTitle>Project Breakdown</CardTitle>
                   <CardDescription>
-                    Time spent on each project this month
+                    Time spent on each project in the current {viewMode === 'week' ? 'week' : 'day'}
                   </CardDescription>
                 </CardHeader>
                 <CardContent>
@@ -907,7 +1059,7 @@ export default function AdminReportsPage() {
                         <div className="text-right">
                           <span className="font-bold">{formatHours(project.hours)}</span>
                           <div className="text-sm text-muted-foreground">
-                            {((project.hours / reportData.totalHours) * 100).toFixed(1)}%
+                            {reportData.totalHours > 0 ? ((project.hours / reportData.totalHours) * 100).toFixed(1) : 0}%
                           </div>
                         </div>
                       </div>
@@ -923,10 +1075,10 @@ export default function AdminReportsPage() {
                 <CardContent className="text-center py-8">
                   <BarChart3 className="h-12 w-12 text-gray-300 mx-auto mb-4" />
                   <h3 className="text-lg font-medium mb-2">
-                    No data for this month
+                    No data for this {viewMode === 'week' ? 'week' : 'day'}
                   </h3>
                   <p className="text-gray-500 mb-4">
-                    {selectedUserData.name || selectedUserData.email} has no time entries for the selected month.
+                    {selectedUserData.name || selectedUserData.email} has no time entries for the selected {viewMode === 'week' ? 'week' : 'day'}.
                   </p>
                   <Button onClick={() => handleAddEntry()} className="flex items-center gap-2">
                     <Plus className="h-4 w-4" />
@@ -944,7 +1096,7 @@ export default function AdminReportsPage() {
             <CardContent className="text-center py-12">
               <Users className="h-12 w-12 text-gray-300 mx-auto mb-4" />
               <h3 className="text-lg font-medium mb-2">Select a User</h3>
-              <p className="text-gray-500">
+              <p className="text-gray-600">
                 Choose a user from the dropdown above to view and manage their detailed time tracking report.
               </p>
             </CardContent>
@@ -976,18 +1128,21 @@ export default function AdminReportsPage() {
                 <Label htmlFor="project">Project</Label>
                 <Select value={formData.projectId} onValueChange={(value) => setFormData({...formData, projectId: value})}>
                   <SelectTrigger>
-                    <SelectValue placeholder="Select a project (optional)" />
+                    <SelectValue placeholder="Select a project (required)" />
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="none">No Project</SelectItem>
-                    {projects.map((project) => (
+                    {projects
+                    .slice() // Create a copy to avoid mutating the original array
+                    .sort((a, b) => a.code.localeCompare(b.code)) // Sort by project code
+                    .map((project) => (
                       <SelectItem key={project.id} value={project.id}>
                         <div className="flex items-center gap-2">
                           <div 
                             className="w-3 h-3 rounded-full" 
                             style={{ backgroundColor: project.color }}
                           />
-                          {project.name}
+                          {project.code}  {project.name}
                         </div>
                       </SelectItem>
                     ))}
@@ -1024,17 +1179,7 @@ export default function AdminReportsPage() {
                   />
                 </div>
               </div>
-              <div className="grid gap-2">
-                <Label htmlFor="duration">Duration (hours)</Label>
-                <Input 
-                  id="duration"
-                  type="number"
-                  step="0.1"
-                  min="0"
-                  value={formData.duration}
-                  onChange={(e) => setFormData({...formData, duration: parseFloat(e.target.value) || 0})}
-                />
-              </div>
+
             </div>
             <DialogFooter>
               <Button type="button" variant="outline" onClick={() => setEditDialogOpen(false)}>
@@ -1077,7 +1222,7 @@ export default function AdminReportsPage() {
                 Delete Entry
               </AlertDialogAction>
             </AlertDialogFooter>
-            </AlertDialogContent>
+          </AlertDialogContent>
         </AlertDialog>
       </div>
     </DashboardLayout>

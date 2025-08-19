@@ -24,23 +24,25 @@ import {
   Shield,
   Search,
   Filter,
-  List
+  List,
+  ChevronLeft,
+  ChevronRight
 } from 'lucide-react'
 import { 
   format, 
   parseISO, 
-  startOfMonth, 
-  endOfMonth, 
-  eachWeekOfInterval, 
   startOfWeek,
   endOfWeek,
   eachDayOfInterval,
   isSameDay,
-  addMonths,
-  subMonths,
+  addWeeks,
+  subWeeks,
+  addDays,
+  subDays,
   isBefore,
   isWithinInterval,
-  subDays
+  startOfDay,
+  endOfDay
 } from 'date-fns'
 import { cn } from '@/lib/utils'
 import DashboardLayout from '@/components/dashboard-layout'
@@ -65,7 +67,8 @@ interface Project {
   id: string
   name: string
   description: string | null
-  color: string
+  color: string,
+  code: string
 }
 
 export default function CalendarPage() {
@@ -81,10 +84,11 @@ export default function CalendarPage() {
   // Cache management
   const [entryCache, setEntryCache] = useState<Map<string, TimeEntry[]>>(new Map())
   
-  // Month navigation
+  // Date navigation and view mode
   const [selectedDate, setSelectedDate] = useState(new Date())
-  const [startDate, setStartDate] = useState<Date>(startOfMonth(new Date()))
-  const [endDate, setEndDate] = useState<Date>(endOfMonth(new Date()))
+  const [viewMode, setViewMode] = useState<'week' | 'day'>('week')
+  const [startDate, setStartDate] = useState<Date>(startOfWeek(new Date(), { weekStartsOn: 1 }))
+  const [endDate, setEndDate] = useState<Date>(endOfWeek(new Date(), { weekStartsOn: 1 }))
   
   // Entry management
   const [editingEntry, setEditingEntry] = useState<TimeEntry | null>(null)
@@ -108,7 +112,6 @@ export default function CalendarPage() {
     description: '',
     startTime: '',
     endTime: '',
-    duration: 0,
     date: format(new Date(), 'yyyy-MM-dd')
   })
 
@@ -133,10 +136,10 @@ export default function CalendarPage() {
 
   // Helper to clear cache for specific dates
   const clearCacheForDate = (date: Date) => {
-    const monthKey = format(startOfMonth(date), 'yyyy-MM')
+    const weekKey = format(startOfWeek(date, { weekStartsOn: 1 }), 'yyyy-MM-dd')
     setEntryCache(prev => {
       const newCache = new Map(prev)
-      newCache.delete(monthKey)
+      newCache.delete(weekKey)
       return newCache
     })
   }
@@ -147,13 +150,36 @@ export default function CalendarPage() {
     }
   }, [status, router])
 
-  // Update date ranges when selected date changes
+  // Update date ranges when selected date or view mode changes
   useEffect(() => {
-    const monthStart = startOfMonth(selectedDate)
-    const monthEnd = endOfMonth(selectedDate)
-    setStartDate(monthStart)
-    setEndDate(monthEnd)
-  }, [selectedDate])
+    if (viewMode === 'week') {
+      const weekStart = startOfWeek(selectedDate, { weekStartsOn: 1 })
+      const weekEnd = endOfWeek(selectedDate, { weekStartsOn: 1 })
+      setStartDate(weekStart)
+      setEndDate(weekEnd)
+    } else {
+      const dayStart = startOfDay(selectedDate)
+      const dayEnd = endOfDay(selectedDate)
+      setStartDate(dayStart)
+      setEndDate(dayEnd)
+    }
+  }, [selectedDate, viewMode])
+
+  const hasOverlap = (newStart: Date, newEnd: Date | null, excludeId?: string): boolean => {
+  return timeEntries.some(entry => {
+    if (entry.id === excludeId) return false;
+    
+    const existingStart = parseISO(entry.startTime);
+    const existingEnd = entry.endTime ? parseISO(entry.endTime) : new Date();
+    
+    // Check if new entry overlaps with existing entry
+    return (
+      (newStart >= existingStart && newStart < existingEnd) ||
+      (newEnd && newEnd > existingStart && newEnd <= existingEnd) ||
+      (newStart <= existingStart && newEnd && newEnd >= existingEnd)
+    );
+  });
+};
 
   useEffect(() => {
     if (session) {
@@ -164,18 +190,20 @@ export default function CalendarPage() {
         fetchAllTimeEntries() // For timesheet view, get all entries
       }
     }
-  }, [session, selectedDate, activeTab])
+  }, [session, selectedDate, activeTab, viewMode])
 
   useEffect(() => {
     applyFilters()
   }, [timeEntries, searchTerm, selectedProject, dateRange, sortBy])
 
   const fetchTimeEntries = async (forceRefresh = false) => {
-    const monthKey = format(startOfMonth(selectedDate), 'yyyy-MM')
+    const cacheKey = viewMode === 'week' 
+      ? format(startOfWeek(selectedDate, { weekStartsOn: 1 }), 'yyyy-MM-dd')
+      : format(selectedDate, 'yyyy-MM-dd')
     
     // Check cache first
-    if (!forceRefresh && entryCache.has(monthKey)) {
-      const cachedEntries = entryCache.get(monthKey)!
+    if (!forceRefresh && entryCache.has(cacheKey)) {
+      const cachedEntries = entryCache.get(cacheKey)!
       setTimeEntries(cachedEntries)
       setLoading(false)
       return
@@ -196,7 +224,7 @@ export default function CalendarPage() {
       setTimeEntries(data)
       
       // Cache the results
-      setEntryCache(prev => new Map(prev).set(monthKey, data))
+      setEntryCache(prev => new Map(prev).set(cacheKey, data))
     } catch (error) {
       console.error('Error fetching time entries:', error)
       toast.error('Failed to fetch time entries')
@@ -243,8 +271,8 @@ export default function CalendarPage() {
           )
           break
         case 'week':
-          const weekStart = startOfWeek(now)
-          const weekEnd = endOfWeek(now)
+          const weekStart = startOfWeek(now, { weekStartsOn: 1 })
+          const weekEnd = endOfWeek(now, { weekStartsOn: 1 })
           filtered = filtered.filter(entry => 
             isWithinInterval(parseISO(entry.startTime), { start: weekStart, end: weekEnd })
           )
@@ -290,24 +318,35 @@ export default function CalendarPage() {
   }
 
   // Navigation functions
-  const goToPreviousMonth = () => {
-    setSelectedDate(prev => subMonths(prev, 1))
+  const goToPrevious = () => {
+    if (viewMode === 'week') {
+      setSelectedDate(prev => subWeeks(prev, 1))
+    } else {
+      setSelectedDate(prev => subDays(prev, 1))
+    }
   }
 
-  const goToNextMonth = () => {
-    setSelectedDate(prev => addMonths(prev, 1))
+  const goToNext = () => {
+    if (viewMode === 'week') {
+      setSelectedDate(prev => addWeeks(prev, 1))
+    } else {
+      setSelectedDate(prev => addDays(prev, 1))
+    }
   }
 
-  const goToCurrentMonth = () => {
+  const goToCurrent = () => {
     setSelectedDate(new Date())
   }
 
   const handleForceRefresh = async () => {
-    // Clear cache for current month
-    const monthKey = format(startOfMonth(selectedDate), 'yyyy-MM')
+    // Clear cache for current period
+    const cacheKey = viewMode === 'week' 
+      ? format(startOfWeek(selectedDate, { weekStartsOn: 1 }), 'yyyy-MM-dd')
+      : format(selectedDate, 'yyyy-MM-dd')
+    
     setEntryCache(prev => {
       const newCache = new Map(prev)
-      newCache.delete(monthKey)
+      newCache.delete(cacheKey)
       return newCache
     })
     
@@ -353,7 +392,7 @@ export default function CalendarPage() {
   const totalPages = Math.ceil(filteredEntries.length / itemsPerPage)
 
   // Entry management functions
-  const handleAddEntry = (date: Date) => {
+  const handleAddEntry = (date: Date, startTime?: string) => {
     if (isEditingRestricted(date)) {
       setAdminAlertMessage(
         `You cannot add entries for ${format(date, 'MMMM yyyy')} after the 15th of the current month. Please contact your administrator for assistance with past entries.`
@@ -361,16 +400,19 @@ export default function CalendarPage() {
       setAdminAlertOpen(true)
       return
     }
+    const start = startTime ? parseISO(`${format(date || new Date(), 'yyyy-MM-dd')}T${startTime}`) : new Date();
+    const end = startTime ? new Date(start.getTime() + 30 * 60000) : new Date(start.getTime() + 8 * 3600 * 1000);
+    const defaultDurationInMinutes = 30; // Default duration of 30 minutes
+
     
     setEditingEntry(null)
     setFormData({
-      projectId: '',
-      description: '',
-      startTime: '09:00',
-      endTime: '17:00',
-      duration: 8,
-      date: format(date, 'yyyy-MM-dd')
-    })
+    projectId: '',
+    description: '',
+    startTime: format(startDate, 'HH:mm'),
+    endTime: format(endDate, 'HH:mm'),
+    date: format(date || new Date(), 'yyyy-MM-dd')
+  });
     setEditDialogOpen(true)
   }
 
@@ -388,13 +430,12 @@ export default function CalendarPage() {
     setEditingEntry(entry)
     const startDate = parseISO(entry.startTime)
     setFormData({
-      projectId: entry.project.id,
-      description: entry.description || '',
-      startTime: format(startDate, 'HH:mm'),
-      endTime: entry.endTime ? format(parseISO(entry.endTime), 'HH:mm') : '',
-      duration: entry.duration ? entry.duration / 60 : 0,
-      date: format(startDate, 'yyyy-MM-dd')
-    })
+    projectId: '',
+    description: '',
+    startTime: format(startDate, 'HH:mm'),
+    endTime: format(endDate, 'HH:mm'),
+    date: format(startDate || new Date(), 'yyyy-MM-dd')
+  });
     setEditDialogOpen(true)
   }
 
@@ -424,6 +465,7 @@ export default function CalendarPage() {
     try {
       const entryDate = new Date(formData.date)
       
+      
       if (editingEntry) {
         // Update existing entry
         const startDateTime = new Date(`${formData.date}T${formData.startTime}`)
@@ -431,9 +473,11 @@ export default function CalendarPage() {
           ? new Date(`${formData.date}T${formData.endTime}`)
           : null
 
-        const duration = endDateTime 
-          ? Math.floor((endDateTime.getTime() - startDateTime.getTime()) / 60000)
-          : formData.duration * 60
+          // Check for overlaps
+          if (hasOverlap(startDateTime, endDateTime, editingEntry?.id)) {
+            toast.error('This time entry overlaps with an existing entry. Please choose a different time.');
+            return;
+          }
 
         const response = await fetch(`/api/time-entries/${editingEntry.id}`, {
           method: 'PUT',
@@ -443,7 +487,6 @@ export default function CalendarPage() {
             description: formData.description,
             startTime: startDateTime.toISOString(),
             endTime: endDateTime?.toISOString() || null,
-            duration
           })
         })
 
@@ -470,9 +513,6 @@ export default function CalendarPage() {
           ? new Date(`${formData.date}T${formData.endTime}`)
           : null
 
-        const duration = endDateTime 
-          ? Math.floor((endDateTime.getTime() - startDateTime.getTime()) / 60000)
-          : formData.duration * 60
 
         const response = await fetch('/api/time-entries/manual', {
           method: 'POST',
@@ -482,10 +522,14 @@ export default function CalendarPage() {
             description: formData.description,
             startTime: startDateTime.toISOString(),
             endTime: endDateTime?.toISOString() || null,
-            duration
+            
           })
         })
-
+              if (response.status === 409) {
+        const errorData = await response.json();
+        toast.error(errorData.error || 'Time entry overlaps with existing entries');
+        return;
+      }
         if (response.ok) {
           toast.success('Entry created successfully')
           setEditDialogOpen(false)
@@ -494,11 +538,15 @@ export default function CalendarPage() {
           clearCacheForDate(entryDate)
           
           if (activeTab === 'calendar') {
-            // If the new entry is in current view, refresh
-            if (entryDate >= startDate && entryDate <= endDate) {
+            // Check if the new entry is in current view
+            const isInCurrentView = viewMode === 'week' 
+              ? entryDate >= startDate && entryDate <= endDate
+              : isSameDay(entryDate, selectedDate)
+            
+            if (isInCurrentView) {
               await fetchTimeEntries(true)
             } else {
-              toast.info(`Entry added for ${format(entryDate, 'MMM dd, yyyy')}. Navigate to that month to see it.`)
+              toast.info(`Entry added for ${format(entryDate, 'MMM dd, yyyy')}. Navigate to that date to see it.`)
             }
           } else {
             await fetchAllTimeEntries()
@@ -512,6 +560,7 @@ export default function CalendarPage() {
       console.error('Error saving entry:', error)
       toast.error(`Failed to ${editingEntry ? 'update' : 'create'} entry`)
     }
+    
   }
 
   const confirmDeleteEntry = async () => {
@@ -544,139 +593,263 @@ export default function CalendarPage() {
     }
   }
 
-  // Render monthly calendar
-  const renderMonthView = () => {
-    const monthStart = startOfMonth(selectedDate)
-    const monthEnd = endOfMonth(selectedDate)
-    const weeks = eachWeekOfInterval({ start: monthStart, end: monthEnd }, { weekStartsOn: 1 })
+  // Render week view
+  const renderWeekView = () => {
+    const weekStart = startOfWeek(selectedDate, { weekStartsOn: 1 })
+    const weekDays = eachDayOfInterval({
+      start: weekStart,
+      end: endOfWeek(weekStart, { weekStartsOn: 1 })
+    })
     
     return (
       <div className="space-y-2">
-        {/* Month header */}
+        {/* Week header */}
         <div className="grid grid-cols-7 gap-2 mb-4">
-          {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map((day) => (
-            <div key={day} className="text-center font-medium p-2 text-sm text-gray-600">
-              {day}
+          {weekDays.map((day) => (
+            <div key={day.toISOString()} className="text-center">
+              <div className="font-medium text-sm text-gray-600 mb-1">
+                {format(day, 'EEE')}
+              </div>
+              <div className={cn(
+                "text-lg font-semibold p-2 rounded cursor-pointer hover:bg-gray-100 transition-colors",
+                isSameDay(day, new Date()) && "bg-blue-100 text-blue-700",
+                isSameDay(day, selectedDate) && "bg-blue-500 text-white"
+              )}
+              onClick={() => {
+                setSelectedDate(day)
+                setViewMode('day')
+              }}
+              >
+                {format(day, 'd')}
+              </div>
             </div>
           ))}
         </div>
         
-        {/* Month days */}
-        {weeks.map((weekStart, weekIndex) => {
-          const weekDays = eachDayOfInterval({
-            start: startOfWeek(weekStart, { weekStartsOn: 1 }),
-            end: endOfWeek(weekStart, { weekStartsOn: 1 })
-          })
-          
-          return (
-            <div key={weekIndex} className="grid grid-cols-7 gap-2">
-              {weekDays.map((day) => {
-                const entries = getEntriesForDate(day)
-                const totalMinutes = getTotalDurationForDate(day)
-                const isToday = isSameDay(day, new Date())
-                const isCurrentMonth = day >= monthStart && day <= monthEnd
-                const isPastRestricted = isEditingRestricted(day)
+        {/* Week days */}
+        <div className="grid grid-cols-7 gap-2">
+          {weekDays.map((day) => {
+            const entries = getEntriesForDate(day)
+            const totalMinutes = getTotalDurationForDate(day)
+            const isToday = isSameDay(day, new Date())
+            const isPastRestricted = isEditingRestricted(day)
+            
+            return (
+              <div
+                key={day.toISOString()}
+                className={cn(
+                  "border rounded-lg p-2 min-h-[200px] transition-colors relative",
+                  isToday && "border-blue-500 bg-blue-50",
+                  !isToday && "border-gray-200 hover:bg-gray-50",
+                  isPastRestricted && "bg-red-50 border-red-200"
+                )}
+              >
+                <div className="flex items-center justify-between mb-2">
+                  <span className={cn(
+                    "text-sm font-medium",
+                    isToday ? "text-blue-700" : "text-gray-700"
+                  )}>
+                    {format(day, 'MMM d')}
+                  </span>
+                  {isPastRestricted && (
+                    <div title="Admin approval required for changes">
+                      <Shield className="h-3 w-3 text-red-500" />
+                    </div>
+                  )}
+                </div>
                 
-                return (
-                  <div
-                    key={day.toISOString()}
-                    className={cn(
-                      "border rounded-lg p-2 min-h-[120px] transition-colors relative",
-                      isToday && "border-blue-500 bg-blue-50",
-                      !isCurrentMonth && "opacity-50 bg-gray-50",
-                      isCurrentMonth && !isToday && "border-gray-200 hover:bg-gray-50",
-                      isPastRestricted && isCurrentMonth && "bg-red-50 border-red-200"
-                    )}
-                  >
-                    <div className="flex items-center justify-between mb-1">
-                      <span className={cn(
-                        "text-sm font-medium",
-                        isToday ? "text-blue-700" : "text-gray-700"
-                      )}>
-                        {format(day, 'd')}
-                      </span>
-                      {isPastRestricted && (
-                        <div title="Admin approval required for changes"><Shield className="h-3 w-3 text-red-500" /></div>
-                      )}
-                    </div>
-                    
-                    {totalMinutes > 0 && (
-                      <Badge variant="secondary" className="text-xs mb-1">
-                        {formatHours(totalMinutes)}
-                      </Badge>
-                    )}
-                    
-                    <div className="space-y-1">
-                      {entries.slice(0, 3).map((entry) => (
-                        <div
-                          key={entry.id}
-                          className="text-xs p-1 rounded bg-white border-l-2 cursor-pointer hover:bg-gray-50 group relative"
-                          style={{ borderLeftColor: entry.project.color }}
-                        >
-                          {/* Entry content */}
-                          <div onClick={() => handleEditEntry(entry)}>
-                            <div className="font-medium truncate pr-6">
-                              {entry.project.name}
-                            </div>
-                            <div className="text-gray-500 truncate">
-                              {formatHours(entry.duration || 0)}
-                            </div>
-                            <div className="text-gray-400 truncate text-[10px]">
-                              {formatTime(entry.startTime)} - {entry.endTime ? formatTime(entry.endTime) : 'Running'}
-                            </div>
-                            {entry.description && (
-                              <div className="text-gray-500 truncate text-[10px] mt-1">
-                                {entry.description}
-                              </div>
-                            )}
-                          </div>
-                          
-                          {/* Action buttons */}
-                          <div className="absolute top-1 right-1 opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1 bg-white rounded shadow-sm">
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation()
-                                handleEditEntry(entry)
-                              }}
-                              className="p-1 hover:bg-blue-50 rounded"
-                              title="Edit entry"
-                            >
-                              <Edit2 className="h-3 w-3 text-blue-600" />
-                            </button>
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation()
-                                handleDeleteEntry(entry)
-                              }}
-                              className="p-1 hover:bg-red-50 rounded"
-                              title="Delete entry"
-                            >
-                              <Trash2 className="h-3 w-3 text-red-600" />
-                            </button>
-                          </div>
-                        </div>
-                      ))}
-                      {entries.length > 3 && (
-                        <div className="text-xs text-gray-500 text-center">
-                          +{entries.length - 3} more
-                        </div>
-                      )}
-                    </div>
-                    
-                    {/* Add button - always show for all days, restriction is handled in handleAddEntry */}
-                    <button
-                      onClick={() => handleAddEntry(day)}
-                      className="absolute bottom-1 right-1 p-1 rounded-full bg-blue-500 hover:bg-blue-600 text-white shadow-sm transition-colors"
-                      title="Add entry"
+                {totalMinutes > 0 && (
+                  <Badge variant="secondary" className="text-xs mb-2">
+                    {formatHours(totalMinutes)}
+                  </Badge>
+                )}
+                
+                <div className="space-y-1">
+                  {entries.slice(0, 4).map((entry) => (
+                    <div
+                      key={entry.id}
+                      className="text-xs p-1 rounded bg-white border-l-2 cursor-pointer hover:bg-gray-50 group relative"
+                      style={{ borderLeftColor: entry.project.color }}
                     >
-                      <Plus className="h-3 w-3" />
-                    </button>
+                      {/* Entry content */}
+                      <div onClick={() => handleEditEntry(entry)}>
+                        <div className="font-medium truncate pr-6">
+                          {entry.project.name}
+                        </div>
+                        <div className="text-gray-500 truncate">
+                          {formatHours(entry.duration || 0)}
+                        </div>
+                        <div className="text-gray-400 truncate text-[10px]">
+                          {formatTime(entry.startTime)} - {entry.endTime ? formatTime(entry.endTime) : 'Running'}
+                        </div>
+                        {entry.description && (
+                          <div className="text-gray-500 truncate text-[10px] mt-1">
+                            {entry.description}
+                          </div>
+                        )}
+                      </div>
+                      
+                      {/* Action buttons */}
+                      <div className="absolute top-1 right-1 opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1 bg-white rounded shadow-sm">
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            handleEditEntry(entry)
+                          }}
+                          className="p-1 hover:bg-blue-50 rounded"
+                          title="Edit entry"
+                        >
+                          <Edit2 className="h-3 w-3 text-blue-600" />
+                        </button>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            handleDeleteEntry(entry)
+                          }}
+                          className="p-1 hover:bg-red-50 rounded"
+                          title="Delete entry"
+                        >
+                          <Trash2 className="h-3 w-3 text-red-600" />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                  {entries.length > 4 && (
+                    <div 
+                      className="text-xs text-gray-500 text-center cursor-pointer hover:text-gray-700"
+                      onClick={() => {
+                        setSelectedDate(day)
+                        setViewMode('day')
+                      }}
+                    >
+                      +{entries.length - 4} more
+                    </div>
+                  )}
+                </div>
+                
+                {/* Add button */}
+                <button
+                  onClick={() => handleAddEntry(day)}
+                  className="absolute bottom-1 right-1 p-1 rounded-full bg-blue-500 hover:bg-blue-600 text-white shadow-sm transition-colors"
+                  title="Add entry"
+                >
+                  <Plus className="h-3 w-3" />
+                </button>
+              </div>
+            )
+          })}
+        </div>
+      </div>
+    )
+  }
+
+  // Render day view
+  const renderDayView = () => {
+    const entries = getEntriesForDate(selectedDate)
+    const totalMinutes = getTotalDurationForDate(selectedDate)
+    const isToday = isSameDay(selectedDate, new Date())
+    const isPastRestricted = isEditingRestricted(selectedDate)
+    
+    return (
+      <div className="space-y-4">
+        {/* Day header */}
+        <div className="text-center">
+          <h3 className={cn(
+            "text-2xl font-semibold mb-2",
+            isToday ? "text-blue-700" : "text-gray-900"
+          )}>
+            {format(selectedDate, 'EEEE, MMMM d, yyyy')}
+          </h3>
+          <div className="flex items-center justify-center gap-4">
+            {totalMinutes > 0 && (
+              <Badge variant="secondary" className="text-sm">
+                Total: {formatHours(totalMinutes)}
+              </Badge>
+            )}
+            {isPastRestricted && (
+              <Badge variant="destructive" className="text-sm flex items-center gap-1">
+                <Shield className="h-3 w-3" />
+                Admin approval required
+              </Badge>
+            )}
+          </div>
+        </div>
+        
+        {/* Day entries */}
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between">
+            <CardTitle className="text-lg">Time Entries</CardTitle>
+            <Button onClick={() => handleAddEntry(selectedDate)} size="sm">
+              <Plus className="h-4 w-4 mr-2" />
+              Add Entry
+            </Button>
+          </CardHeader>
+          <CardContent>
+            {entries.length === 0 ? (
+              <div className="text-center py-8 text-gray-500">
+                <Clock className="h-12 w-12 mx-auto mb-4 text-gray-300" />
+                <p>No entries for this day</p>
+                <Button 
+                  variant="outline" 
+                  className="mt-4"
+                  onClick={() => handleAddEntry(selectedDate)}
+                >
+                  Add First Entry
+                </Button>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {entries.map((entry) => (
+                  <div
+                    key={entry.id}
+                    className="border rounded-lg p-4 hover:bg-gray-50 transition-colors group"
+                    style={{ borderLeftWidth: '4px', borderLeftColor: entry.project.color }}
+                  >
+                    <div className="flex items-center justify-between">
+                      <div className="flex-1">
+                        <div className="flex items-center gap-3 mb-2">
+                          <h4 className="font-medium text-lg">{entry.project.name}</h4>
+                          <Badge variant="secondary">
+                            {formatDuration(entry.duration)}
+                          </Badge>
+                        </div>
+                        <div className="text-sm text-gray-600 flex items-center gap-4 mb-2">
+                          <span className="flex items-center gap-1">
+                            <Clock className="h-3 w-3" />
+                            {formatTime(entry.startTime)} - {entry.endTime ? formatTime(entry.endTime) : 'Running'}
+                          </span>
+                        </div>
+                        {entry.description && (
+                          <p className="text-sm text-gray-700 mt-1">
+                            {entry.description}
+                          </p>
+                        )}
+                      </div>
+                      <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <Button 
+                          size="sm" 
+                          variant="outline"
+                          onClick={() => handleEditEntry(entry)}
+                          className="h-8 w-8 p-0 hover:bg-blue-50 hover:text-blue-600"
+                        >
+                          <Edit2 className="h-4 w-4" />
+                        </Button>
+                        <Button 
+                          size="sm" 
+                          variant="outline"
+                          onClick={() => handleDeleteEntry(entry)}
+                          className="h-8 w-8 p-0 hover:bg-destructive hover:text-destructive-foreground"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </div>
                   </div>
-                )
-              })}
-            </div>
-          )
-        })}
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
       </div>
     )
   }
@@ -698,6 +871,16 @@ export default function CalendarPage() {
   const totalMinutes = activeTab === 'calendar' 
     ? timeEntries.reduce((sum, entry) => sum + (entry.duration || 0), 0)
     : getTotalDuration()
+
+  const getViewModeLabel = () => {
+    if (viewMode === 'week') {
+      const weekStart = startOfWeek(selectedDate, { weekStartsOn: 1 })
+      const weekEnd = endOfWeek(selectedDate, { weekStartsOn: 1 })
+      return `Week of ${format(weekStart, 'MMM d')} - ${format(weekEnd, 'MMM d, yyyy')}`
+    } else {
+      return format(selectedDate, 'EEEE, MMMM d, yyyy')
+    }
+  }
 
   return (
     <DashboardLayout>
@@ -735,12 +918,12 @@ export default function CalendarPage() {
           </TabsList>
 
           <TabsContent value="calendar" className="space-y-4">
-            {/* Month Navigation */}
+            {/* Navigation and View Controls */}
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   <CalendarIcon className="h-5 w-5" />
-                  Month Navigation
+                  Navigation & View
                 </CardTitle>
               </CardHeader>
               <CardContent>
@@ -749,28 +932,46 @@ export default function CalendarPage() {
                     <Button
                       variant="outline"
                       size="sm"
-                      onClick={goToPreviousMonth}
+                      onClick={goToPrevious}
                     >
-                      ←
+                      <ChevronLeft className="h-4 w-4" />
                     </Button>
-                    <div className="min-w-[120px] text-center py-2 px-3 border rounded">
-                      {format(selectedDate, 'MMM yyyy')}
+                    <div className="min-w-[200px] text-center py-2 px-3 border rounded">
+                      {getViewModeLabel()}
                     </div>
                     <Button
                       variant="outline"
                       size="sm"
-                      onClick={goToNextMonth}
+                      onClick={goToNext}
                     >
-                      →
+                      <ChevronRight className="h-4 w-4" />
                     </Button>
                   </div>
                   
                   <div className="flex items-center gap-2">
+                    <div className="flex rounded-md overflow-hidden border">
+                      <Button
+                        variant={viewMode === 'week' ? 'default' : 'outline'}
+                        size="sm"
+                        onClick={() => setViewMode('week')}
+                        className="rounded-none border-0"
+                      >
+                        Week
+                      </Button>
+                      <Button
+                        variant={viewMode === 'day' ? 'default' : 'outline'}
+                        size="sm"
+                        onClick={() => setViewMode('day')}
+                        className="rounded-none border-0"
+                      >
+                        Day
+                      </Button>
+                    </div>
                     <Button
                       variant="outline"
-                      onClick={goToCurrentMonth}
+                      onClick={goToCurrent}
                     >
-                      Current Month
+                      {viewMode === 'week' ? 'Current Week' : 'Today'}
                     </Button>
                     <Button
                       variant="outline"
@@ -786,22 +987,27 @@ export default function CalendarPage() {
               </CardContent>
             </Card>
 
-            {/* Calendar */}
+            {/* Calendar View */}
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center justify-between">
-                  <span>Calendar - {format(selectedDate, 'MMMM yyyy')}</span>
+                  <span>{viewMode === 'week' ? 'Week View' : 'Day View'}</span>
                   <div className="flex items-center gap-4 text-sm text-gray-600">
                     <div className="flex items-center gap-2">
                       <div className="w-3 h-3 bg-red-100 border border-red-200 rounded"></div>
                       <span>Admin approval required</span>
                     </div>
-                    <span>Click entries to edit • Hover for actions</span>
+                    <span>
+                      {viewMode === 'week' 
+                        ? 'Click dates for day view • Click entries to edit • Hover for actions'
+                        : 'Click entries to edit • Hover for actions'
+                      }
+                    </span>
                   </div>
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                {renderMonthView()}
+                {viewMode === 'week' ? renderWeekView() : renderDayView()}
               </CardContent>
             </Card>
           </TabsContent>
@@ -1053,18 +1259,21 @@ export default function CalendarPage() {
                 <Label htmlFor="project">Project</Label>
                 <Select value={formData.projectId} onValueChange={(value) => setFormData({...formData, projectId: value})}>
                   <SelectTrigger>
-                    <SelectValue placeholder="Select a project (optional)" />
+                    <SelectValue placeholder="Select a project (Required)" />
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="none">No Project</SelectItem>
-                    {projects.map((project) => (
+                   {projects
+        .slice() // Create a copy to avoid mutating the original array
+        .sort((a, b) => a.code.localeCompare(b.code)) // Sort by project code
+        .map((project) =>  (
                       <SelectItem key={project.id} value={project.id}>
                         <div className="flex items-center gap-2">
                           <div 
                             className="w-3 h-3 rounded-full" 
                             style={{ backgroundColor: project.color }}
                           />
-                          {project.name}
+                          {project.code} {project.name}
                         </div>
                       </SelectItem>
                     ))}
@@ -1100,17 +1309,6 @@ export default function CalendarPage() {
                     onChange={(e) => setFormData({...formData, endTime: e.target.value})}
                   />
                 </div>
-              </div>
-              <div className="grid gap-2">
-                <Label htmlFor="duration">Duration (hours)</Label>
-                <Input 
-                  id="duration"
-                  type="number"
-                  step="0.1"
-                  min="0"
-                  value={formData.duration}
-                  onChange={(e) => setFormData({...formData, duration: parseFloat(e.target.value) || 0})}
-                />
               </div>
             </div>
             <DialogFooter>

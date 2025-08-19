@@ -11,9 +11,7 @@ const createTimeEntrySchema = z.object({
   projectId: z.string().min(1),
   description: z.string().optional(),
   startTime: z.string(),
-  endTime: z.string().optional(),
-  duration: z.number().min(0).optional(),
-  hours: z.number().min(0),
+  endTime: z.string(),
   date: z.string()
 })
 
@@ -22,10 +20,20 @@ const updateTimeEntrySchema = z.object({
   description: z.string().optional(),
   startTime: z.string().optional(),
   endTime: z.string().optional(),
-  duration: z.number().min(0).optional(),
-  hours: z.number().min(0).optional(),
   date: z.string().optional()
 })
+
+// Helper function to calculate duration in minutes
+function calculateDuration(startTime: string, endTime: string): number {
+  const start = new Date(startTime).getTime();
+  const end = new Date(endTime).getTime();
+  return Math.round((end - start) / (1000 * 60)); // Convert ms to minutes
+}
+
+// Helper function to calculate hours from duration
+function calculateHours(duration: number): number {
+  return parseFloat((duration / 60).toFixed(2)); // Convert minutes to hours
+}
 
 export async function GET(request: NextRequest) {
   try {
@@ -96,7 +104,7 @@ export async function POST(request: NextRequest) {
       }, { status: 400 })
     }
 
-    const { projectId, description, startTime, endTime, duration, hours, date } = result.data
+    const { projectId, description, startTime, endTime, date } = result.data
 
     // Check if user has access to this project
     const projectAccess = await prisma.projectUser.findFirst({
@@ -110,6 +118,10 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'No access to this project' }, { status: 403 })
     }
 
+    // Calculate duration and hours
+    const duration = calculateDuration(startTime, endTime);
+    const hours = calculateHours(duration);
+
     // Create the time entry
     const timeEntry = await prisma.timeEntry.create({
       data: {
@@ -117,7 +129,7 @@ export async function POST(request: NextRequest) {
         projectId,
         description,
         startTime: new Date(startTime),
-        endTime: endTime ? new Date(endTime) : null,
+        endTime: new Date(endTime),
         duration,
         hours,
         date: new Date(date)
@@ -179,7 +191,9 @@ export async function PUT(request: NextRequest) {
       where: { id: entryId },
       select: {
         userId: true,
-        projectId: true
+        projectId: true,
+        startTime: true,
+        endTime: true
       }
     })
 
@@ -193,7 +207,7 @@ export async function PUT(request: NextRequest) {
     }
 
     const updateData: any = {}
-    const { projectId, description, startTime, endTime, duration, hours, date } = result.data
+    const { projectId, description, startTime, endTime, date } = result.data
 
     if (projectId !== undefined) {
       // Check access to new project if changing
@@ -212,11 +226,30 @@ export async function PUT(request: NextRequest) {
     }
 
     if (description !== undefined) updateData.description = description
-    if (startTime !== undefined) updateData.startTime = new Date(startTime)
-    if (endTime !== undefined) updateData.endTime = endTime ? new Date(endTime) : null
-    if (duration !== undefined) updateData.duration = duration
-    if (hours !== undefined) updateData.hours = hours
     if (date !== undefined) updateData.date = new Date(date)
+    
+    // Handle time updates
+    if (startTime !== undefined || endTime !== undefined) {
+      // Ensure both startTime and endTime are provided for calculation
+      if (!startTime || !endTime) {
+        return NextResponse.json({ 
+          error: 'Both startTime and endTime are required to calculate duration' 
+        }, { status: 400 })
+      }
+      
+      const newStartTime = new Date(startTime)
+      const newEndTime = new Date(endTime)
+      
+      updateData.startTime = newStartTime
+      updateData.endTime = newEndTime
+      
+      // Calculate duration and hours
+      const duration = calculateDuration(startTime, endTime);
+      const hours = calculateHours(duration);
+      
+      updateData.duration = duration
+      updateData.hours = hours
+    }
 
     // Update the time entry
     const updatedEntry = await prisma.timeEntry.update({

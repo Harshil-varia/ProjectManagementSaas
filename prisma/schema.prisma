@@ -43,7 +43,7 @@ model TimeEntry {
 model Project {
   id                 String              @id @default(cuid())
   name               String
-  description        String?
+  code               String?
   color              String              @default("#3b82f6")
   active             Boolean             @default(true)
   createdAt          DateTime            @default(now())

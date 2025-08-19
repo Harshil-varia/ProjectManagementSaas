@@ -3,7 +3,6 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { NEXT_AUTH_CONFIG } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
-import { Prisma } from '@prisma/client'
 import { Decimal } from '@prisma/client/runtime/library'
 
 // Helper function for error handling
@@ -67,7 +66,7 @@ export async function GET(request: NextRequest) {
           name: true,
           color: true,
           active: true,
-          description: true,
+          code: true,
           totalBudget: true,
           q1Budget: true,
           q2Budget: true,
@@ -115,7 +114,7 @@ export async function GET(request: NextRequest) {
         name: project.name,
         color: project.color,
         active: project.active,
-        description: project.description,
+        code: project.code,
         totalBudget: safeDecimalToNumber(project.totalBudget),
         q1Budget: safeDecimalToNumber(project.q1Budget),
         q2Budget: safeDecimalToNumber(project.q2Budget),
@@ -157,6 +156,7 @@ export async function GET(request: NextRequest) {
         select: {
           id: true,
           name: true,
+          code: true,
           color: true,
           active: true,
           totalBudget: true,
@@ -189,6 +189,7 @@ export async function GET(request: NextRequest) {
       const formattedProjects = adminProjects.map(project => ({
         id: project.id,
         name: project.name,
+        code: project.code,
         color: project.color,
         active: project.active,
         totalBudget: safeDecimalToNumber(project.totalBudget),
@@ -219,6 +220,7 @@ export async function GET(request: NextRequest) {
       select: {
         id: true,
         name: true,
+        code: true,
         color: true,
         active: true,
         totalBudget: true,
@@ -270,6 +272,44 @@ export async function GET(request: NextRequest) {
 
   } catch (error) {
     console.error('Failed to fetch projects:', getErrorMessage(error))
+    return NextResponse.json({ 
+      error: 'Internal server error',
+      details: process.env.NODE_ENV === 'development' ? getErrorMessage(error) : 'An error occurred' 
+    }, { status: 500 })
+  }
+}
+// POST /api/projects
+// POST /api/projects
+export async function POST(req: NextRequest) {
+  try {
+    const session = await getServerSession(NEXT_AUTH_CONFIG)
+    if (!session) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
+    const body = await req.json()
+    const { name, code, color, active } = body
+
+    // Basic validation
+    if (!name) {
+      return NextResponse.json({ error: 'Project name is required' }, { status: 400 })
+    }
+
+    // Create the project
+    const project = await prisma.project.create({
+      data: {
+        name,
+        code,
+        color,
+        active: active !== undefined ? active : true, // Default to true if not provided
+        createdAt: new Date(),
+        updatedAt: new Date()
+      }
+    })
+
+    return NextResponse.json(project)
+  } catch (error) {
+    console.error('Failed to create project:', getErrorMessage(error))
     return NextResponse.json({ 
       error: 'Internal server error',
       details: process.env.NODE_ENV === 'development' ? getErrorMessage(error) : 'An error occurred' 

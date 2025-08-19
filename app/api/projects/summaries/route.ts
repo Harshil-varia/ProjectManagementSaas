@@ -117,7 +117,7 @@ export async function GET() {
       return {
         id: project.id,
         name: project.name,
-        description: project.description,
+        description: project.code,
         color: project.color,
         active: project.active,
         totalBudget,

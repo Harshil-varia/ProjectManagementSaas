@@ -10,7 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 interface Project {
   id: string
   name: string
-  description: string | null
+  code: string | null
   color: string
   active: boolean
   createdAt: string
@@ -19,7 +19,7 @@ interface Project {
 
 interface CreateProjectData {
   name: string
-  description: string | null
+  code: string | null
   color: string
   active: boolean
 }
@@ -44,7 +44,7 @@ const colorOptions = [
 export default function ProjectForm({ project, onSubmit, onCancel }: ProjectFormProps) {
   const [formData, setFormData] = useState<CreateProjectData>({
     name: project?.name || '',
-    description: project?.description || '',
+    code: project?.code || '',
     color: project?.color || '#3b82f6',
     active: project?.active ?? true
   })
@@ -72,11 +72,11 @@ export default function ProjectForm({ project, onSubmit, onCancel }: ProjectForm
           </div>
           
           <div>
-            <Label htmlFor="description">Description</Label>
+            <Label htmlFor="description">Code</Label>
             <Input
               id="description"
-              value={formData.description || ''}
-              onChange={(e) => setFormData({ ...formData, description: e.target.value || null })}
+              value={formData.code || ''}
+              onChange={(e) => setFormData({ ...formData, code: e.target.value || null })}
             />
           </div>
           

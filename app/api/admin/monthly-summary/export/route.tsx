@@ -58,7 +58,7 @@ export async function GET(request: NextRequest) {
             id: true,
             name: true,
             color: true,
-            description: true
+            code: true
           }
         }
       },
@@ -87,7 +87,7 @@ export async function GET(request: NextRequest) {
         summaryMap.set(key, {
           employeeName: entry.user.name || 'N/A',
           employeeEmail: entry.user.email,
-          projectCode: entry.project.description,
+          projectCode: entry.project.code,
           projectName: entry.project.name,
           aggregatedHours: hours,
           hourlyRate: rate,

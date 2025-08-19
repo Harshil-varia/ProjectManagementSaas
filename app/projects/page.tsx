@@ -13,7 +13,7 @@ import ProjectForm from '@/components/project/project-form'
 interface Project {
   id: string
   name: string
-  description: string | null
+  code: string | null
   color: string
   active: boolean
   createdAt: string
@@ -23,7 +23,7 @@ interface Project {
 // Type for creating a new project (without id, createdAt, updatedAt)
 interface CreateProjectData {
   name: string
-  description: string | null
+  code: string | null
   color: string
   active: boolean
 }
@@ -162,7 +162,7 @@ export default function ProjectsPage() {
                       className="w-4 h-4 rounded-full"
                       style={{ backgroundColor: project.color }}
                     />
-                    <CardTitle className="text-lg">{project.name}</CardTitle>
+                    <CardTitle className="text-lg">{project.code}</CardTitle>
                   </div>
                   <Badge variant={project.active ? 'default' : 'secondary'}>
                     {project.active ? 'Active' : 'Inactive'}
@@ -171,7 +171,7 @@ export default function ProjectsPage() {
               </CardHeader>
               <CardContent>
                 <p className="text-gray-600 mb-4">
-                  {project.description || 'No description'}
+                  {project.name}
                 </p>
                 <div className="flex gap-2">
                   <Button
