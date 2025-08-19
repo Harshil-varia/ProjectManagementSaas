@@ -58,7 +58,7 @@ const useProjectPermissions = () => {
       }
 
       try {
-        const response = await fetch('/api/users/project-permissions')
+        const response = await fetch('/api/admin/permissions')
         if (response.ok) {
           const data = await response.json()
           setProjectPermissions(data.projects || [])

@@ -1265,7 +1265,11 @@ export default function CalendarPage() {
                     <SelectItem value="none">No Project</SelectItem>
                    {projects
         .slice() // Create a copy to avoid mutating the original array
-        .sort((a, b) => a.code.localeCompare(b.code)) // Sort by project code
+        .sort((a, b) => {
+  const codeA = a.code || ''; // Fallback to empty string if code is undefined
+  const codeB = b.code || ''; // Fallback to empty string if code is undefined
+  return codeA.localeCompare(codeB);
+}) // Sort by project code
         .map((project) =>  (
                       <SelectItem key={project.id} value={project.id}>
                         <div className="flex items-center gap-2">
